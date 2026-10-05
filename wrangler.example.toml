@@ -7,8 +7,8 @@ crons = ["17 * * * *"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "masaa-jobs"
-database_id = "REPLACE_WITH_EXISTING_D1_DATABASE_ID"
+database_name = "mas3a-jobs"
+database_id = "997d7aca-b536-4e0b-b412-7065719699ac"
 migrations_dir = "migrations"
 
 [vars]
