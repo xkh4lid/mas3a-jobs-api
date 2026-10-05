@@ -37,7 +37,16 @@ const MILITARY_NEWS_SOURCES = [
     ],
     articlePath: /\/MediaAffairs\/MONGNews\/\d+\/Pages\/[^?#]+\.aspx/i,
     applyHosts: ["jobs.sang.gov.sa"],
-    keywords: ["القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "رتبة", "الالتحاق بالخدمة العسكرية"]
+    applyUrl: "https://jobs.sang.gov.sa/",
+    keywords: [
+      "فتح باب القبول",
+      "فتح باب التسجيل",
+      "القبول والتسجيل",
+      "الراغبين في الالتحاق بالخدمة العسكرية",
+      "الالتحاق بالخدمة العسكرية",
+      "التجنيد",
+      "وظائف عسكرية"
+    ]
   }
 ];
 
@@ -63,6 +72,16 @@ const SOURCE_CATALOG = [
     status: "portal"
   },
   {
+    key: "mod-tajnid",
+    name: "التجنيد الموحد - وزارة الدفاع",
+    url: "https://tajnid.mod.gov.sa/",
+    source_type: "official_portal",
+    sector: "عسكري",
+    enabled: 1,
+    supported: 0,
+    status: "portal"
+  },
+  {
     key: "sang-jobs",
     name: "بوابة توظيف الحرس الوطني",
     url: "https://jobs.sang.gov.sa/",
@@ -74,8 +93,8 @@ const SOURCE_CATALOG = [
   }
 ];
 
-const VERSION = "2.2.0";
-const LOCALIZATION_VERSION = "ar-v2";
+const VERSION = "2.2.1";
+const LOCALIZATION_VERSION = "ar-v3";
 const nowIso = () => new Date().toISOString();
 
 const clean = (value) =>
@@ -289,20 +308,60 @@ function removeBoilerplate(value) {
       .replace(/Apply now\s*»?/gi, " ")
       .replace(/Find similar jobs/gi, " ")
       .replace(/View Profile/gi, " ")
+      .replace(/When you visit any website[\s\S]{0,1800}?(?:cookies?|privacy)/gi, " ")
+      .replace(/Your cookie preferences[\s\S]{0,1600}?(?:cookies?|privacy)/gi, " ")
+      .replace(/This website uses cookies[\s\S]{0,1600}?(?:Accept|Reject|Settings)/gi, " ")
+      .replace(/Cookie Preferences[\s\S]{0,1200}?(?:Accept|Reject|Settings)/gi, " ")
+      .replace(/Manage Preferences[\s\S]{0,1200}?(?:Accept|Reject|Settings)/gi, " ")
   );
 }
 
+function containsCookieNoise(value) {
+  return /(?:cookies?|cookie preferences|privacy preferences|local storage|browser storage|manage preferences|accept cookies|reject cookies)/i.test(String(value ?? ""));
+}
+
+function sanitizeQualification(value) {
+  const raw = clean(value);
+  if (!raw || containsCookieNoise(raw)) return null;
+  return clean(
+    removeBoilerplate(raw)
+      .replace(/\b(?:Experience requirement|Years of Experience|Additional Education|Certifications|Apply now)\b[\s\S]*$/i, " ")
+  ).slice(0, 420) || null;
+}
+
+function sanitizeExperience(value) {
+  const raw = clean(value);
+  if (!raw || containsCookieNoise(raw)) return null;
+  return clean(
+    removeBoilerplate(raw)
+      .replace(/\b(?:Nature of Experience|Job Band|Professional Skills|Managerial Skills|Education|Additional Education|Certifications|Apply now)\b[\s\S]*$/i, " ")
+  ).slice(0, 320) || null;
+}
+
+function markerIndex(source, marker, from = 0) {
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (/^[A-Za-z0-9 ]+$/.test(marker)) {
+    const regex = new RegExp(`\\b${escaped}\\b`, "ig");
+    regex.lastIndex = from;
+    const match = regex.exec(source);
+    return match ? match.index : -1;
+  }
+  return source.toLowerCase().indexOf(marker.toLowerCase(), from);
+}
+
 function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
-  const source = String(text ?? "");
-  const lower = source.toLowerCase();
+  const source = removeBoilerplate(String(text ?? ""));
   let start = -1;
   let markerLength = 0;
 
+  // Marker order is intentional: prefer specific labels before generic words.
+  // Word boundaries prevent "Education" from matching "Educational" in a job title.
   for (const marker of startMarkers) {
-    const idx = lower.indexOf(marker.toLowerCase());
-    if (idx >= 0 && (start < 0 || idx < start)) {
+    const idx = markerIndex(source, marker);
+    if (idx >= 0) {
       start = idx;
       markerLength = marker.length;
+      break;
     }
   }
 
@@ -310,7 +369,7 @@ function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
   let end = source.length;
   const from = start + markerLength;
   for (const marker of stopMarkers) {
-    const idx = lower.indexOf(marker.toLowerCase(), from);
+    const idx = markerIndex(source, marker, from);
     if (idx >= 0 && idx < end) end = idx;
   }
 
@@ -318,7 +377,7 @@ function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
 }
 
 function extractDescription(html) {
-  const text = stripHtml(html);
+  const text = removeBoilerplate(stripHtml(html));
   const summary = extractSection(
     text,
     ["Job Purpose", "About The Role", "About the Role", "Role Purpose", "Position Summary", "Job Summary", "Job Description"],
@@ -390,7 +449,7 @@ function inferEntryLevel({ title, description, experience }) {
 
 function extractDetail(html, source, url) {
   const visibleHtml = withoutScripts(html);
-  const fullText = stripHtml(visibleHtml);
+  const fullText = removeBoilerplate(stripHtml(visibleHtml));
 
   const title =
     stripHtml((visibleHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1]) ||
@@ -403,12 +462,12 @@ function extractDetail(html, source, url) {
     textAfterLabel(fullText, ["Location", "Primary Location", "مدينة الوظيفة", "الموقع"], 100);
 
   const qualification =
-    visibleFieldFromHtml(visibleHtml, ["Education", "Qualifications", "Minimum Qualifications", "المؤهل", "المؤهلات"], 500) ||
-    extractSection(fullText, ["Qualifications", "Education", "Minimum Qualifications"], ["Experience", "Required Skills", "Preferred Skills", "Apply now"], 500);
+    sanitizeQualification(visibleFieldFromHtml(visibleHtml, ["Education", "Minimum Qualifications", "Qualifications", "المؤهل", "المؤهلات"], 500)) ||
+    sanitizeQualification(extractSection(fullText, ["Minimum Qualifications", "Qualifications", "Education"], ["Experience requirement", "Years of Experience", "Experience", "Required Skills", "Preferred Skills", "Additional Education", "Certifications", "Apply now"], 500));
 
   const experience =
-    visibleFieldFromHtml(visibleHtml, ["Years of Experience", "Experience", "Minimum Experience", "الخبرة"], 450) ||
-    extractSection(fullText, ["Years of Experience", "Minimum Experience", "Experience"], ["Nature of Experience", "Job Band", "Skills", "Education", "Apply now"], 450);
+    sanitizeExperience(visibleFieldFromHtml(visibleHtml, ["Years of Experience", "Minimum Experience", "Experience", "الخبرة"], 450)) ||
+    sanitizeExperience(extractSection(fullText, ["Years of Experience", "Minimum Experience", "Experience"], ["Nature of Experience", "Job Band", "Professional Skills", "Managerial Skills", "Skills", "Education", "Apply now"], 450));
 
   const published =
     visibleFieldFromHtml(visibleHtml, ["Date", "Posting Date", "Date Posted", "تاريخ النشر"], 80) ||
@@ -428,9 +487,9 @@ function extractDetail(html, source, url) {
     city,
     region: null,
     work_mode: remote ? "عن بُعد" : null,
-    qualification: clean(qualification) || null,
+    qualification,
     specialization: null,
-    experience: clean(experience) || null,
+    experience,
     salary: null,
     published_at: parseDate(published),
     expires_at: null,
@@ -461,33 +520,54 @@ function findApplyUrl(html, source, fallback) {
 }
 
 function extractMilitaryAnnouncement(html, source, url) {
-  const text = stripHtml(html);
-  const lower = text.toLowerCase();
-  if (!source.keywords.some((keyword) => lower.includes(keyword.toLowerCase()))) return null;
-
+  const text = removeBoilerplate(stripHtml(html));
   const title =
     stripHtml((String(html).match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1]) ||
     clean(decodeBasicEntities((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ["", ""])[1]));
 
-  const publishedAt = parseDmyDate(text);
-  if (!publishedAt || daysSince(publishedAt) > 35) return null;
+  const focused = clean(`${title} ${text}`);
+  const recruitmentPatterns = [
+    /فتح\s+باب\s+(?:القبول|التسجيل)/i,
+    /القبول\s+والتسجيل/i,
+    /الراغبين\s+في\s+الالتحاق\s+بالخدمة\s+العسكرية/i,
+    /الالتحاق\s+بالخدمة\s+العسكرية/i,
+    /وظائف\s+عسكرية/i,
+    /(?:التجنيد|تجنيد)\s*(?:-|–|—)?\s*(?:رجال|نساء)?/i
+  ];
+
+  const hasRecruitmentSignal = recruitmentPatterns.some((pattern) => pattern.test(focused));
+  const hasApplicationSignal =
+    /(?:رابط\s+التقديم|التقديم\s+(?:متاح|يبدأ|عبر)|التسجيل\s+(?:متاح|يبدأ|عبر)|jobs\.sang\.gov\.sa)/i.test(focused);
+
+  // General ministry news must never become a military vacancy.
+  if (!hasRecruitmentSignal || !hasApplicationSignal) return null;
+
+  const summaryMatch = text.match(
+    /(?:تعلن|أعلنت)[\s\S]{20,900}?(?=رابط\s+التقديم|للتقديم|التقديم\s+عبر|جميع\s+الحقوق|هل\s+كانت\s+هذه\s+الصفحة\s+مفيدة|$)/i
+  );
+  if (!summaryMatch) return null;
+
+  const parsedPublishedAt = parseDmyDate(text);
+  if (parsedPublishedAt && daysSince(parsedPublishedAt) > 35) return null;
+  const publishedAt = parsedPublishedAt || nowIso().slice(0, 10);
 
   let expiresAt = null;
   const gregorianDeadline = text.match(/حتى\s+يوم[^\d]{0,80}(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(20\d{2})\s*م?/i);
   if (gregorianDeadline) {
     expiresAt = `${gregorianDeadline[3]}-${String(gregorianDeadline[2]).padStart(2, "0")}-${String(gregorianDeadline[1]).padStart(2, "0")}`;
   } else {
-    expiresAt = addDays(publishedAt, 21);
+    expiresAt = addDays(publishedAt, 14);
   }
 
   if (expiresAt && new Date(`${expiresAt}T23:59:59Z`).getTime() < Date.now()) return null;
 
-  const summaryMatch = text.match(/(?:تعلن|أعلنت)([\s\S]{40,1000}?)(?:رابط التقديم|للتقديم|جميع الحقوق|هل كانت هذه الصفحة مفيدة|$)/i);
-  const summary = removeBoilerplate(summaryMatch?.[0] || text).slice(0, 650);
-  const slug = new URL(url).pathname.split("/").filter(Boolean).pop()?.replace(/\.aspx$/i, "") || "announcement";
+  const summary = removeBoilerplate(summaryMatch[0]).slice(0, 520);
+  const parsedUrl = new URL(url);
+  const pathMatch = parsedUrl.pathname.match(/\/MONGNews\/([^/]+)\/Pages\/([^/.]+)/i);
+  const slug = pathMatch ? `${pathMatch[1]}-${pathMatch[2]}` : parsedUrl.pathname.split("/").filter(Boolean).pop()?.replace(/\.aspx$/i, "") || "announcement";
 
   return {
-    external_id: `${publishedAt}-${slug}`,
+    external_id: slug,
     title: clean(title) || "فتح باب القبول والتسجيل للخدمة العسكرية",
     company: source.company,
     sector: "عسكري",
@@ -502,7 +582,7 @@ function extractMilitaryAnnouncement(html, source, url) {
     expires_at: expiresAt,
     summary,
     source_url: url,
-    apply_url: findApplyUrl(html, source, url),
+    apply_url: findApplyUrl(html, source, source.applyUrl || "https://jobs.sang.gov.sa/"),
     remote: 0,
     fresh_graduate: 0,
     no_experience: 0
@@ -525,7 +605,52 @@ async function fetchText(url) {
   return response.text();
 }
 
-async function translateToArabic(env, value, maxLength = 900) {
+const TITLE_TRANSLATIONS = new Map([
+  ["Events Coordinator", "منسق فعاليات"],
+  ["Energy Transition Educational Initiatives Lead", "قائد مبادرات التعليم في تحول الطاقة"],
+  ["Senior HPC Systems Administrator", "مسؤول أول أنظمة الحوسبة عالية الأداء (HPC)"],
+  ["Operational Authorities Analyst", "محلل الصلاحيات التشغيلية"],
+  ["Research User Computing Linux Specialist", "أخصائي لينكس لحوسبة المستخدمين البحثية"],
+  ["Business Manager", "مدير أعمال"],
+  ["Technology Support Lead", "قائد دعم التقنية"],
+  ["Digital Audit Operations Analyst", "محلل عمليات التدقيق الرقمي"],
+  ["Technology Internal Auditor", "مدقق داخلي للتقنية"],
+  ["HR Analytics Analyst", "محلل تحليلات الموارد البشرية"],
+  ["Lead Integration Architect", "مهندس معماري أول للتكامل"],
+  ["Software Engineer", "مهندس برمجيات"],
+  ["Research Scientist", "باحث علمي"],
+  ["Security Specialist", "أخصائي أمن"],
+  ["Network Engineer", "مهندس شبكات"]
+]);
+
+function normalizedEnglishTitle(value) {
+  return clean(value)
+    .replace(/\s*[-–—]\s*\d{6,}\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function professionalTitleArabic(value) {
+  const title = normalizedEnglishTitle(value);
+  return TITLE_TRANSLATIONS.get(title) || null;
+}
+
+function cleanLocalizedText(value, maxLength) {
+  return clean(value)
+    .replace(/^["'«»]+|["'«»]+$/g, "")
+    .replace(/^(?:الترجمة|العربية|النص المترجم)\s*[:：-]\s*/i, "")
+    .slice(0, maxLength) || null;
+}
+
+function usableArabic(value, kind = "text") {
+  const text = clean(value);
+  if (!text || !isArabic(text)) return false;
+  if (/كوكيز|ملفات تعريف الارتباط|تفضيلات الخصوصية|سياسة الكوكيز/i.test(text)) return false;
+  if (kind === "title" && text.length > 120) return false;
+  return true;
+}
+
+async function translateFallback(env, value, maxLength = 900) {
   const text = clean(value).slice(0, maxLength);
   if (!text || isArabic(text) || !env.AI) return text || null;
 
@@ -536,18 +661,59 @@ async function translateToArabic(env, value, maxLength = 900) {
       target_lang: "ar"
     });
 
-    const translated = clean(
+    const translated = cleanLocalizedText(
       response?.translated_text ||
       response?.translation ||
       response?.result?.translated_text ||
       response?.translations?.[0]?.translated_text ||
       response?.translations?.[0]?.text ||
-      ""
+      "",
+      maxLength
     );
 
-    return translated || text;
+    return usableArabic(translated) ? translated : text;
   } catch {
     return text;
+  }
+}
+
+async function localizeFieldsWithAI(env, job) {
+  if (!env.AI) return null;
+
+  const payload = {
+    title: normalizedEnglishTitle(job.title),
+    summary: clean(removeBoilerplate(job.summary)).slice(0, 650) || null,
+    experience: sanitizeExperience(job.experience),
+    qualification: sanitizeQualification(job.qualification)
+  };
+
+  try {
+    const prompt = `أنت محرر وظائف سعودي. ترجم البيانات الإنجليزية التالية إلى عربية مهنية طبيعية وواضحة فقط. لا تضف أي معلومة غير موجودة. حافظ على الاختصارات التقنية مثل HPC وLinux وAI وGPU كما هي. احذف أي نص خاص بالكوكيز أو التنقل أو أزرار الموقع. أعد JSON فقط بالمفاتيح title وsummary وexperience وqualification، والقيمة null إذا كان الحقل فارغًا.\n\n${JSON.stringify(payload)}`;
+    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+      prompt,
+      temperature: 0.1,
+      max_tokens: 700
+    });
+
+    const raw = clean(
+      response?.response ||
+      response?.result?.response ||
+      response?.result ||
+      response?.output_text ||
+      ""
+    );
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      title: cleanLocalizedText(parsed?.title, 180),
+      summary: cleanLocalizedText(parsed?.summary, 650),
+      experience: cleanLocalizedText(parsed?.experience, 300),
+      qualification: cleanLocalizedText(parsed?.qualification, 400)
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -564,17 +730,30 @@ async function localizeJob(env, source, job) {
 
   if (job.sector === "عسكري") return localized;
 
-  const [title, summary, experience, qualification] = await Promise.all([
-    translateToArabic(env, job.title, 220),
-    translateToArabic(env, job.summary, 700),
-    translateToArabic(env, job.experience, 350),
-    translateToArabic(env, job.qualification, 450)
-  ]);
+  const exactTitle = professionalTitleArabic(job.title);
+  const ai = await localizeFieldsWithAI(env, job);
 
-  localized.title = title || job.title;
-  localized.summary = summary || job.summary;
-  localized.experience = experience || job.experience;
-  localized.qualification = qualification || job.qualification;
+  localized.title =
+    exactTitle ||
+    (usableArabic(ai?.title, "title") ? ai.title : null) ||
+    await translateFallback(env, normalizedEnglishTitle(job.title), 180) ||
+    job.title;
+
+  localized.summary =
+    (usableArabic(ai?.summary) ? ai.summary : null) ||
+    await translateFallback(env, removeBoilerplate(job.summary), 650) ||
+    job.summary;
+
+  localized.experience =
+    (usableArabic(ai?.experience) ? ai.experience : null) ||
+    await translateFallback(env, sanitizeExperience(job.experience), 300) ||
+    sanitizeExperience(job.experience);
+
+  localized.qualification =
+    (usableArabic(ai?.qualification) ? ai.qualification : null) ||
+    await translateFallback(env, sanitizeQualification(job.qualification), 400) ||
+    sanitizeQualification(job.qualification);
+
   return localized;
 }
 
@@ -997,7 +1176,8 @@ async function syncMilitaryNewsSource(env, source) {
   return {
     source: source.key,
     jobsSeen: seenExternalIds.length,
-    added,    updated,
+    added,
+    updated,
     errors: detailErrors
   };
 }
