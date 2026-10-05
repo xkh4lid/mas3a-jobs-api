@@ -13,6 +13,10 @@ migrations_dir = "migrations"
 
 [vars]
 CORS_ORIGIN = "https://mas3a.pages.dev"
+
+[ai]
+binding = "AI"
+
 [observability]
 enabled = true
 
