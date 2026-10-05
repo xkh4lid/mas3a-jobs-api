@@ -1,0 +1,15 @@
+name = "mas3a-jobs-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[triggers]
+crons = ["17 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "masaa-jobs"
+database_id = "REPLACE_WITH_EXISTING_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+CORS_ORIGIN = "https://mas3a.pages.dev"
