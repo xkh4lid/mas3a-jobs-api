@@ -1,3 +1,6 @@
+import { initWasm, Resvg } from "@resvg/resvg-wasm";
+import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
+
 const SUCCESSFACTORS_SOURCES = [
   {
     key: "stc",
@@ -417,7 +420,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.28.0-telegram-job-card-experiment";
+const VERSION = "3.29.0-telegram-job-card-png";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4765,37 +4768,167 @@ function jobCardText(value, max = 54) {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
-function telegramJobCardSvg(job) {
+function telegramCompanyDomain(job) {
+  const sourceKey = clean(job?.source_key).toLowerCase();
+  const company = clean(job?.company).toLowerCase();
+
+  const bySource = {
+    "stc": "stc.com.sa",
+    "kaust": "kaust.edu.sa",
+    "saudia": "saudia.com",
+    "aramco": "aramco.com",
+    "acwa-power": "acwapower.com",
+    "spimaco": "spimaco.com.sa",
+    "sab": "sab.com",
+    "jhah": "jhah.com",
+    "sipchem": "sipchem.com",
+    "alfanar": "alfanar.com",
+    "sasref": "sasref.com.sa",
+    "tasnee": "tasnee.com",
+    "moh-jobs": "moh.gov.sa",
+    "sang-military": "sang.gov.sa",
+    "mod-tajnid": "mod.gov.sa",
+    "absher-military": "jobs.sa"
+  };
+
+  if (bySource[sourceKey]) return bySource[sourceKey];
+  if (company.includes("وزارة الدفاع")) return "mod.gov.sa";
+  if (company.includes("وزارة الداخلية")) return "moi.gov.sa";
+  if (company.includes("الحرس الوطني")) return "sang.gov.sa";
+  if (company.includes("وزارة الصحة")) return "moh.gov.sa";
+  if (company.includes("أرامكو") || company.includes("aramco")) return "aramco.com";
+  if (company.includes("أكوا") || company.includes("acwa")) return "acwapower.com";
+  if (company.includes("stc") || company.includes("إس تي سي")) return "stc.com.sa";
+  if (company.includes("سابك") || company.includes("sabic")) return "sabic.com";
+  if (company.includes("بوبا") || company.includes("bupa")) return "bupa.com.sa";
+  if (company.includes("الراجحي") || company.includes("rajhi")) return "alrajhibank.com.sa";
+  if (company.includes("الكهرباء") || company.includes("electric")) return "se.com.sa";
+
+  for (const candidate of [job?.apply_url, job?.source_url]) {
+    try {
+      const host = new URL(candidate).hostname.toLowerCase().replace(/^www\./, "");
+      if (!host || ["ewdifh.com", "wadhefa.com", "wdeftksa.com", "isaudinews.com"].includes(host)) continue;
+      return host.replace(/^(?:careers?|jobs?)\./, "");
+    } catch {
+      // Ignore malformed source URLs.
+    }
+  }
+  return "";
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + chunk)));
+  }
+  return btoa(binary);
+}
+
+let telegramCardFontPromise = null;
+let telegramResvgInitPromise = null;
+
+async function telegramCardFontBytes() {
+  if (!telegramCardFontPromise) {
+    telegramCardFontPromise = (async () => {
+      const response = await fetch("https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", {
+        headers: { "User-Agent": "MasaaJobs/1.0" }
+      });
+      if (!response.ok) throw new Error("telegram_card_font_fetch_failed:" + response.status);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength < 10000 || bytes.byteLength > 2000000) throw new Error("telegram_card_font_invalid");
+      return bytes;
+    })().catch((error) => {
+      telegramCardFontPromise = null;
+      throw error;
+    });
+  }
+  return telegramCardFontPromise;
+}
+
+async function ensureTelegramResvg() {
+  if (!telegramResvgInitPromise) {
+    telegramResvgInitPromise = initWasm(resvgWasm).catch((error) => {
+      telegramResvgInitPromise = null;
+      throw error;
+    });
+  }
+  return telegramResvgInitPromise;
+}
+
+async function telegramCompanyLogoDataUri(job) {
+  const domain = telegramCompanyDomain(job);
+  if (!domain) return "";
+  try {
+    const url = "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=128";
+    const response = await fetch(url, { headers: { "User-Agent": "MasaaJobs/1.0" } });
+    if (!response.ok) return "";
+    const contentType = clean(response.headers.get("Content-Type")).split(";")[0].toLowerCase();
+    if (!["image/png", "image/jpeg"].includes(contentType)) return "";
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.byteLength || bytes.byteLength > 512000) return "";
+    return "data:" + contentType + ";base64," + bytesToBase64(bytes);
+  } catch {
+    return "";
+  }
+}
+
+function telegramJobCardSvg(job, logoDataUri = "") {
   const title = xmlEscape(jobCardText(job.title || "فرصة وظيفية", 58));
   const company = xmlEscape(jobCardText(job.company || "جهة موثوقة", 48));
   const city = xmlEscape(jobCardText(job.city || job.region || (job.remote ? "عن بُعد" : "السعودية"), 30));
   const sector = xmlEscape(jobCardText(job.sector || "وظائف", 22));
   const expiry = xmlEscape(jobCardText(job.expires_at || "راجع المصدر الرسمي", 28));
-  const initial = xmlEscape(jobCardText(company, 1) || "م");
+  const initial = xmlEscape(jobCardText(job.company || "م", 1) || "م");
+  const logo = clean(logoDataUri);
+  const logoMarkup = logo
+    ? `<rect x="510" y="265" width="180" height="180" rx="38" fill="#ffffff" stroke="#dce9e2" stroke-width="3"/><image x="535" y="290" width="130" height="130" href="${xmlEscape(logo)}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<circle cx="600" cy="355" r="90" fill="#e8f3ed"/><text x="600" y="385" text-anchor="middle" font-size="86" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b">${initial}</text>`;
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
   <rect width="1200" height="1200" fill="#f7faf6"/>
   <path d="M0 0h1200v170H0z" fill="#0b4f3b"/>
-  <circle cx="1040" cy="85" r="50" fill="#f3c64e"/><text x="1040" y="103" text-anchor="middle" font-size="52" font-family="Arial,sans-serif" fill="#0b4f3b">م</text>
-  <text x="950" y="75" text-anchor="end" font-size="48" font-weight="700" font-family="Arial,sans-serif" fill="white" direction="rtl">مَسعى وظائف</text>
-  <text x="950" y="125" text-anchor="end" font-size="24" font-family="Arial,sans-serif" fill="#d8eee5" direction="rtl">فرص موثقة من المصدر الرسمي</text>
+  <circle cx="1040" cy="85" r="50" fill="#f3c64e"/><text x="1040" y="103" text-anchor="middle" font-size="52" font-family="Noto Kufi Arabic" fill="#0b4f3b">م</text>
+  <text x="950" y="75" text-anchor="end" font-size="48" font-weight="700" font-family="Noto Kufi Arabic" fill="white" direction="rtl">مَسعى وظائف</text>
+  <text x="950" y="125" text-anchor="end" font-size="24" font-family="Noto Kufi Arabic" fill="#d8eee5" direction="rtl">فرص موثقة من المصدر الرسمي</text>
   <rect x="70" y="220" width="1060" height="850" rx="42" fill="white" stroke="#dce9e2" stroke-width="3"/>
-  <circle cx="600" cy="355" r="90" fill="#e8f3ed"/><text x="600" y="385" text-anchor="middle" font-size="86" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b">${initial}</text>
-  <text x="600" y="490" text-anchor="middle" font-size="38" font-weight="700" font-family="Arial,sans-serif" fill="#263a33" direction="rtl">${company}</text>
-  <rect x="430" y="525" width="340" height="54" rx="27" fill="#e8f3ed"/><text x="600" y="562" text-anchor="middle" font-size="25" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">✓ المصدر الرسمي</text>
-  <text x="600" y="680" text-anchor="middle" font-size="48" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">${title}</text>
-  <rect x="120" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="390" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">الموقع</text><text x="390" y="846" text-anchor="end" font-size="27" font-family="Arial,sans-serif" fill="#3e514a" direction="rtl">${city}</text>
-  <rect x="450" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="720" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">القطاع</text><text x="720" y="846" text-anchor="end" font-size="27" font-family="Arial,sans-serif" fill="#3e514a" direction="rtl">${sector}</text>
-  <rect x="780" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="1050" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">آخر موعد</text><text x="1050" y="846" text-anchor="end" font-size="25" font-family="Arial,sans-serif" fill="#3e514a" direction="rtl">${expiry}</text>
-  <rect x="260" y="935" width="680" height="82" rx="41" fill="#0b4f3b"/><text x="600" y="987" text-anchor="middle" font-size="30" font-weight="700" font-family="Arial,sans-serif" fill="white" direction="rtl">التقديم من المصدر الرسمي</text>
-  <text x="600" y="1140" text-anchor="middle" font-size="24" font-family="Arial,sans-serif" fill="#60736b" direction="rtl">مَسعى — نتحقق من الوظيفة قبل نشرها</text>
+  ${logoMarkup}
+  <text x="600" y="490" text-anchor="middle" font-size="38" font-weight="700" font-family="Noto Kufi Arabic" fill="#263a33" direction="rtl">${company}</text>
+  <rect x="430" y="525" width="340" height="54" rx="27" fill="#e8f3ed"/><text x="600" y="562" text-anchor="middle" font-size="25" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">✓ المصدر الرسمي</text>
+  <text x="600" y="680" text-anchor="middle" font-size="48" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">${title}</text>
+  <rect x="120" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="390" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">الموقع</text><text x="390" y="846" text-anchor="end" font-size="27" font-family="Noto Kufi Arabic" fill="#3e514a" direction="rtl">${city}</text>
+  <rect x="450" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="720" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">القطاع</text><text x="720" y="846" text-anchor="end" font-size="27" font-family="Noto Kufi Arabic" fill="#3e514a" direction="rtl">${sector}</text>
+  <rect x="780" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="1050" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">آخر موعد</text><text x="1050" y="846" text-anchor="end" font-size="25" font-family="Noto Kufi Arabic" fill="#3e514a" direction="rtl">${expiry}</text>
+  <rect x="260" y="935" width="680" height="82" rx="41" fill="#0b4f3b"/><text x="600" y="987" text-anchor="middle" font-size="30" font-weight="700" font-family="Noto Kufi Arabic" fill="white" direction="rtl">التقديم من المصدر الرسمي</text>
+  <text x="600" y="1140" text-anchor="middle" font-size="24" font-family="Noto Kufi Arabic" fill="#60736b" direction="rtl">مَسعى — نتحقق من الوظيفة قبل نشرها</text>
 </svg>`;
 }
 
+async function telegramJobCardPng(job) {
+  const [fontBytes, logoDataUri] = await Promise.all([
+    telegramCardFontBytes(),
+    telegramCompanyLogoDataUri(job)
+  ]);
+  await ensureTelegramResvg();
+  const svg = telegramJobCardSvg(job, logoDataUri);
+  const renderer = new Resvg(svg, {
+    fitTo: { mode: "width", value: 1200 },
+    font: {
+      fontBuffers: [fontBytes],
+      defaultFontFamily: "Noto Kufi Arabic"
+    }
+  });
+  const png = renderer.render().asPng();
+  if (!(png instanceof Uint8Array) || png.byteLength < 1000) throw new Error("telegram_card_png_invalid");
+  return png;
+}
+
 function telegramJobCardUrl(env, job) {
-  const base = clean(env.TELEGRAM_JOB_CARD_BASE_URL || "");
-  if (!base || !job?.id) return "";
+  const base = clean(env.TELEGRAM_JOB_CARD_BASE_URL || "https://mas3a-jobs-api.xn4wafc.workers.dev/telegram/job-card");
+  if (!job?.id) return "";
   try {
     const url = new URL(base);
+    if (url.protocol !== "https:") return "";
     url.searchParams.set("job", String(job.id));
     return url.href;
   } catch {
@@ -5180,13 +5313,14 @@ async function handleRequest(request, env) {
       if (!id || id.length > 180) return new Response("Not found", { status: 404, headers: securityHeaders() });
       const result = await getJobById(id, env);
       if (!result.ok) return new Response("Not found", { status: 404, headers: securityHeaders() });
-      return new Response(telegramJobCardSvg(result.job), {
+      const png = await telegramJobCardPng(result.job);
+      return new Response(png, {
         status: 200,
         headers: {
           ...securityHeaders(),
-          "Content-Type": "image/svg+xml; charset=utf-8",
+          "Content-Type": "image/png",
           "Cache-Control": "public, max-age=300, s-maxage=1800",
-          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+          "X-Content-Type-Options": "nosniff"
         }
       });
     } catch (error) {
@@ -5340,7 +5474,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain };
 
 export default {
   async fetch(request, env) {
