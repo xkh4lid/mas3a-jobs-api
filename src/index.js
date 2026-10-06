@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.16.0-security";
+const VERSION = "3.16.1-security";
 const LOCALIZATION_VERSION = "ar-v7-title";
 const nowIso = () => new Date().toISOString();
 
@@ -3773,7 +3773,9 @@ async function sitemapJobs(env) {
   ).all();
   return {
     ok: true,
-    jobs: (result.results || []).filter(isPublicJobReady)
+    jobs: (result.results || [])
+      .filter(isPublicJobReady)
+      .map((row) => ({ id: row.id, updated_at: row.updated_at }))
   };
 }
 
@@ -3822,10 +3824,20 @@ async function verifyTurnstile(request, env, token) {
 
     if (!response.ok) return { ok: false, reason: "verification_unavailable" };
     const result = await response.json();
-    return {
-      ok: result?.success === true,
-      reason: result?.success === true ? null : "challenge_failed"
-    };
+    if (result?.success !== true) return { ok: false, reason: "challenge_failed" };
+
+    let expectedHostname = "";
+    try { expectedHostname = new URL(env.CORS_ORIGIN).hostname.toLowerCase(); } catch {}
+    const verifiedHostname = clean(result?.hostname).toLowerCase();
+    if (!expectedHostname || verifiedHostname !== expectedHostname) {
+      return { ok: false, reason: "hostname_mismatch" };
+    }
+
+    if (clean(result?.action) !== "contact") {
+      return { ok: false, reason: "action_mismatch" };
+    }
+
+    return { ok: true, reason: null };
   } catch (error) {
     console.error("mas3a_turnstile_error", clean(error?.message || error));
     return { ok: false, reason: "verification_unavailable" };
@@ -3957,6 +3969,7 @@ async function handleRequest(request, env) {
   if (request.method === "GET" && path.startsWith("/jobs/") && path.length > 6) {
     try {
       const id = decodeURIComponent(path.slice(6));
+      if (!id || id.length > 180) return json({ ok: false, error: "غير موجود" }, env, 404);
       const result = await getJobById(id, env);
       return json(result, env, result.ok ? 200 : 404);
     } catch (error) {
