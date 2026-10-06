@@ -271,7 +271,32 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.7.0";
+const SCHEDULED_SOURCE_ORDER = [
+  "stc",
+  "kaust",
+  "saudia",
+  "aramco",
+  "spimaco",
+  "sab",
+  "jhah",
+  "alfanar",
+  "acwa-power",
+  "tasnee",
+  "sipchem",
+  "sasref"
+];
+
+function scheduledSourceKeyForMinute(minute) {
+  const safeMinute = Math.max(0, Math.min(59, Number(minute) || 0));
+  const slot = Math.floor(safeMinute / 5) % SCHEDULED_SOURCE_ORDER.length;
+  return SCHEDULED_SOURCE_ORDER[slot];
+}
+
+function successFactorsSourceByKey(key) {
+  return SUCCESSFACTORS_SOURCES.find((source) => source.key === key) || null;
+}
+
+const VERSION = "3.8.0";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -1687,7 +1712,9 @@ async function recheckUnseenSuccessFactorsJobs(env, source, seenExternalIds, lim
   return { checked, closed, errors };
 }
 
-async function syncSuccessFactorsSource(env, source) {
+async function syncSuccessFactorsSource(env, source, options = {}) {
+  const detailFetchBudget = Math.max(1, Math.min(Number(options.detailFetchBudget) || 18, 24));
+  const detailAttempts = Math.max(1, Math.min(Number(options.detailAttempts) || 2, 2));
   const urls = new Set();
   const categoryUrls = new Set();
   const listingPaginationUrls = new Set();
@@ -1882,6 +1909,8 @@ async function syncSuccessFactorsSource(env, source) {
   let detailErrors = 0;
   let rejected = 0;
   let closed = 0;
+  let detailFetches = 0;
+  let deferred = 0;
   const seenExternalIds = [];
   const allUrls = [...urls];
   const processedUrls = allUrls.slice(0, 100);
@@ -1896,7 +1925,13 @@ async function syncSuccessFactorsSource(env, source) {
         continue;
       }
 
-      const page = await fetchPage(url, { attempts: 3 });
+      if (detailFetches >= detailFetchBudget) {
+        deferred += 1;
+        continue;
+      }
+
+      detailFetches += 1;
+      const page = await fetchPage(url, { attempts: detailAttempts });
       if (pageExplicitlyClosed(page.status, page.text)) {
         await setExistingJobStatus(env, source, { external_id: externalId, apply_url: url }, "expired");
         closed += 1;
@@ -1937,13 +1972,17 @@ async function syncSuccessFactorsSource(env, source) {
     urls.size >= claimedTotal &&
     detailErrors === 0 &&
     rejected === 0 &&
+    deferred === 0 &&
     processedUrls.length === allUrls.length;
 
   if (completeListing) {
     await archiveMissingJobs(env, source.key, seenExternalIds);
   }
 
-  const recheck = await recheckUnseenSuccessFactorsJobs(env, source, seenExternalIds, 30);
+  const recheckLimit = detailFetches < detailFetchBudget ? Math.min(3, detailFetchBudget - detailFetches) : 0;
+  const recheck = recheckLimit > 0
+    ? await recheckUnseenSuccessFactorsJobs(env, source, seenExternalIds, recheckLimit)
+    : { checked: 0, closed: 0, errors: 0 };
   closed += recheck.closed;
   detailErrors += recheck.errors;
 
@@ -1969,6 +2008,8 @@ async function syncSuccessFactorsSource(env, source) {
     closed,
     rejected,
     claimed_total: claimedTotal || null,
+    detail_fetches: detailFetches,
+    deferred,
     rechecked_existing: recheck.checked,
     errors: detailErrors + rejected
   };
@@ -2065,7 +2106,49 @@ async function activeSyncRun(env) {
   ).first();
 }
 
-async function runSync(env) {
+async function beginSyncRun(env) {
+  const startedAt = nowIso();
+  const insert = await env.DB.prepare(
+    `
+      INSERT INTO sync_runs (
+        started_at, sources_checked, jobs_seen,
+        jobs_added, jobs_updated, errors
+      )
+      VALUES (?, 0, 0, 0, 0, 0)
+    `
+  ).bind(startedAt).run();
+
+  return { startedAt, runId: insert.meta?.last_row_id };
+}
+
+async function finishSyncRun(env, runId, summary) {
+  const finishedAt = nowIso();
+  if (runId) {
+    await env.DB.prepare(
+      `
+        UPDATE sync_runs SET
+          finished_at = ?,
+          sources_checked = ?,
+          jobs_seen = ?,
+          jobs_added = ?,
+          jobs_updated = ?,
+          errors = ?
+        WHERE id = ?
+      `
+    ).bind(
+      finishedAt,
+      summary.sourcesChecked,
+      summary.jobsSeen,
+      summary.jobsAdded,
+      summary.jobsUpdated,
+      summary.errors,
+      runId
+    ).run();
+  }
+  return finishedAt;
+}
+
+async function runSourceBatch(env, sourceKey) {
   const activeRun = await activeSyncRun(env);
   if (activeRun) {
     return {
@@ -2077,24 +2160,59 @@ async function runSync(env) {
     };
   }
 
-  const startedAt = nowIso();
+  const source = successFactorsSourceByKey(sourceKey);
+  if (!source) return { ok: false, error: "unknown_source", source: sourceKey };
+
   await ensureCatalogSources(env);
-  await dedupeExistingJobs(env);
   await expirePastDeadlineJobs(env);
+  const { startedAt, runId } = await beginSyncRun(env);
 
-  const insert = await env.DB.prepare(
-    `
-      INSERT INTO sync_runs (
-        started_at, sources_checked, jobs_seen,
-        jobs_added, jobs_updated, errors
-      )
-      VALUES (?, 0, 0, 0, 0, 0)
-    `
-  )
-    .bind(startedAt)
-    .run();
+  const result = await syncSuccessFactorsSource(env, source, {
+    detailFetchBudget: 18,
+    detailAttempts: 2
+  });
 
-  const runId = insert.meta?.last_row_id;
+  const summary = {
+    sourcesChecked: 1,
+    jobsSeen: result.jobsSeen || 0,
+    jobsAdded: result.added || 0,
+    jobsUpdated: result.updated || 0,
+    errors: result.errors || 0
+  };
+
+  const finishedAt = await finishSyncRun(env, runId, summary);
+
+  return {
+    ok: summary.errors === 0,
+    mode: "source_batch",
+    source: sourceKey,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    sources_checked: 1,
+    jobs_seen: summary.jobsSeen,
+    jobs_added: summary.jobsAdded,
+    jobs_updated: summary.jobsUpdated,
+    errors: summary.errors,
+    result
+  };
+}
+
+async function runSupportBatch(env) {
+  const activeRun = await activeSyncRun(env);
+  if (activeRun) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "sync_already_running",
+      active_run_id: activeRun.id,
+      active_started_at: activeRun.started_at
+    };
+  }
+
+  await ensureCatalogSources(env);
+  await expirePastDeadlineJobs(env);
+  const { startedAt, runId } = await beginSyncRun(env);
+
   let sourcesChecked = 0;
   let jobsSeen = 0;
   let jobsAdded = 0;
@@ -2102,16 +2220,6 @@ async function runSync(env) {
   let errors = 0;
   let monitorWarnings = 0;
   const results = [];
-
-  for (const source of SUCCESSFACTORS_SOURCES) {
-    const result = await syncSuccessFactorsSource(env, source);
-    sourcesChecked += 1;
-    jobsSeen += result.jobsSeen || 0;
-    jobsAdded += result.added || 0;
-    jobsUpdated += result.updated || 0;
-    errors += result.errors || 0;
-    results.push(result);
-  }
 
   for (const source of OFFICIAL_LISTING_SOURCES) {
     const result = await syncOfficialListingSource(env, source);
@@ -2140,32 +2248,15 @@ async function runSync(env) {
     results.push(result);
   }
 
-  // إذا تعطل مصدر لأكثر من 48 ساعة لا نستمر في عرض وظائف لم نعد قادرين
-  // على التحقق منها. تتحول إلى review وتعود تلقائيًا عند نجاح التحقق لاحقًا.
   const quarantinedStaleJobs = await quarantineStaleUnverifiedJobs(env);
-
   await dedupeExistingJobs(env);
-  const finishedAt = nowIso();
 
-  if (runId) {
-    await env.DB.prepare(
-      `
-        UPDATE sync_runs SET
-          finished_at = ?,
-          sources_checked = ?,
-          jobs_seen = ?,
-          jobs_added = ?,
-          jobs_updated = ?,
-          errors = ?
-        WHERE id = ?
-      `
-    )
-      .bind(finishedAt, sourcesChecked, jobsSeen, jobsAdded, jobsUpdated, errors, runId)
-      .run();
-  }
+  const summary = { sourcesChecked, jobsSeen, jobsAdded, jobsUpdated, errors };
+  const finishedAt = await finishSyncRun(env, runId, summary);
 
   return {
     ok: errors === 0,
+    mode: "support_batch",
     started_at: startedAt,
     finished_at: finishedAt,
     sources_checked: sourcesChecked,
@@ -2178,6 +2269,13 @@ async function runSync(env) {
     results
   };
 }
+
+async function runSync(env, options = {}) {
+  const sourceKey = clean(options.sourceKey || "");
+  if (sourceKey) return runSourceBatch(env, sourceKey);
+  return runSourceBatch(env, scheduledSourceKeyForMinute(new Date().getUTCMinutes()));
+}
+
 
 const MAX_CONTACT_BODY_BYTES = 16 * 1024;
 
@@ -2680,7 +2778,8 @@ async function handleRequest(request, env) {
     if (!env.SYNC_SECRET) return json({ ok: false, error: "SYNC_SECRET is not configured" }, env, 503);
     if (!isSyncAuthorized(request, env)) return json({ ok: false, error: "Unauthorized" }, env, 401);
     try {
-      const result = await runSync(env);
+      const sourceKey = clean(url.searchParams.get("source"));
+      const result = await runSync(env, { sourceKey });
       return json(result, env, result.ok ? 200 : 207);
     } catch (error) {
       return internalError(error, env);
@@ -2690,14 +2789,20 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls };
+export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute };
 
 export default {
   async fetch(request, env) {
     return handleRequest(request, env);
   },
 
-  async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(runSync(env));
+  async scheduled(controller, env, ctx) {
+    if (controller.cron === "17 * * * *") {
+      ctx.waitUntil(runSupportBatch(env));
+      return;
+    }
+
+    const minute = new Date(controller.scheduledTime).getUTCMinutes();
+    ctx.waitUntil(runSourceBatch(env, scheduledSourceKeyForMinute(minute)));
   }
 };
