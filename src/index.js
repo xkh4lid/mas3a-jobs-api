@@ -204,6 +204,18 @@ const MILITARY_NEWS_SOURCES = [
   }
 ];
 
+const EWDIFH_SOURCE = {
+  key: "ewdifh",
+  name: "أي وظيفة — مصدر اكتشاف",
+  company: "أي وظيفة",
+  sector: "متعدد",
+  host: "www.ewdifh.com",
+  url: "https://www.ewdifh.com/category/all-jobs",
+  listingUrls: ["https://www.ewdifh.com/category/all-jobs"],
+  sourceType: "discovery_feed",
+  allowExternalApply: true
+};
+
 const SOURCE_CATALOG = [
   ...SUCCESSFACTORS_SOURCES.map((source) => ({
     key: source.key,
@@ -274,6 +286,16 @@ const SOURCE_CATALOG = [
     enabled: 1,
     supported: 1,
     status: "monitor_only"
+  },
+  {
+    key: EWDIFH_SOURCE.key,
+    name: EWDIFH_SOURCE.name,
+    url: EWDIFH_SOURCE.url,
+    source_type: EWDIFH_SOURCE.sourceType,
+    sector: EWDIFH_SOURCE.sector,
+    enabled: 1,
+    supported: 1,
+    status: "pending"
   }
 
 ];
@@ -340,8 +362,8 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.12.0";
-const LOCALIZATION_VERSION = "ar-v5";
+const VERSION = "3.13.0";
+const LOCALIZATION_VERSION = "ar-v6";
 const nowIso = () => new Date().toISOString();
 
 const clean = (value) =>
