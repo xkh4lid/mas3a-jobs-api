@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.31.1-telegram-card-cache-bust";
+const VERSION = "3.32.0-masaa-identity-card";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4765,14 +4765,14 @@ function jobCardText(value, max = 54) {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
-const MASAA_WORDMARK_GREEN_PATH = "M 3,203 3,205 2,206 2,210 1,211 1,216 0,217 0,227 1,228 1,234 2,235 2,238 3,239 5,247 13,262 20,270 20,271 26,277 27,277 36,285 51,293 53,293 54,294 56,294 63,297 73,298 74,299 211,299 212,298 220,297 221,296 226,295 239,288 255,273 255,272 260,266 266,254 266,252 268,248 268,245 269,244 269,240 270,239 270,219 269,218 269,214 268,213 266,205 257,189 245,177 244,177 239,173 231,169 229,169 226,167 223,167 219,165 214,165 213,164 135,164 124,177 124,178 121,181 121,182 118,185 115,190 111,194 111,195 107,199 104,204 94,216 94,218 201,218 205,220 211,227 211,235 209,239 204,243 202,243 201,244 83,244 82,243 76,242 68,238 59,229 53,217 53,214 52,213 52,197 53,196 53,193 55,190 55,188 60,180 60,178 26,178 25,179 23,179 18,182 10,190 7,196 5,198 5,200 Z M 161,143 162,145 217,145 221,141 221,140 233,125 248,143 248,144 258,155 258,156 262,160 262,161 266,165 266,166 276,177 276,178 280,182 280,183 290,194 290,195 294,199 294,200 298,204 298,205 304,211 305,211 312,217 315,218 317,220 321,222 323,222 324,223 326,223 333,226 338,226 339,227 479,227 480,226 484,226 485,225 490,224 496,221 498,219 502,217 506,213 507,213 514,206 521,215 521,216 529,223 540,229 542,229 546,231 549,231 550,232 566,232 567,231 571,231 572,230 574,230 587,223 598,212 598,211 600,209 611,221 612,221 618,226 624,229 626,229 630,231 633,231 634,232 652,232 653,231 656,231 657,230 662,229 671,224 674,221 675,221 686,209 691,215 691,216 702,225 712,230 714,230 718,232 721,232 722,233 730,233 731,234 736,234 737,233 744,233 745,232 748,232 749,231 754,230 759,227 761,227 763,225 766,224 769,221 770,221 787,203 791,208 791,209 803,221 819,230 821,230 828,233 831,233 832,234 838,234 839,235 857,235 858,234 863,234 864,233 867,233 868,232 876,230 886,225 892,220 893,220 902,211 902,210 909,201 912,195 912,193 915,187 915,184 916,183 916,180 917,179 917,173 918,172 918,158 917,157 917,151 916,150 915,143 909,129 907,127 906,124 903,121 903,120 888,106 873,98 870,98 867,96 863,96 862,95 857,95 856,94 840,94 839,95 829,96 828,97 820,99 804,108 792,120 792,121 785,129 783,133 780,136 780,137 777,140 777,141 774,144 774,145 771,148 771,149 768,152 768,153 765,156 765,157 762,160 759,165 750,174 740,179 727,179 721,176 714,169 712,165 712,163 711,162 711,104 710,103 711,102 711,100 710,99 706,99 668,118 666,120 664,120 662,122 662,163 661,164 661,167 659,171 655,175 648,178 638,178 637,177 635,177 630,173 626,166 626,128 625,127 620,128 578,149 576,152 576,167 571,174 563,178 554,178 553,177 551,177 549,176 543,170 541,166 541,141 539,139 523,147 521,149 506,156 504,158 495,162 489,168 480,172 476,172 475,173 399,173 398,171 403,167 404,167 409,162 414,159 423,150 423,149 429,142 433,134 433,132 435,129 436,123 437,122 437,117 438,116 438,102 437,101 437,96 436,95 436,92 434,89 434,87 430,79 428,77 426,73 421,68 421,67 408,57 400,53 398,53 391,50 386,50 385,49 258,49 257,50 253,50 252,51 249,51 248,52 243,53 228,61 225,64 220,67 214,73 211,78 207,82 207,83 204,86 201,91 197,95 197,96 194,99 194,100 191,103 191,104 Z M 840,145 849,145 856,148 861,153 864,160 864,169 863,170 862,174 856,180 849,183 840,183 831,179 824,172 821,165 821,161 826,155 826,154 833,148 Z M 261,104 262,103 376,103 382,108 383,110 383,115 382,116 382,118 372,128 371,128 355,143 354,143 348,149 347,149 338,158 337,158 331,164 330,164 324,158 323,158 319,154 318,154 312,148 311,148 286,126 285,126 271,113 270,113 Z";
-const MASAA_WORDMARK_YELLOW_PATH = "M 756,276 748,276 747,277 744,277 737,281 732,287 730,294 729,295 729,308 732,315 737,320 744,323 756,323 757,322 759,322 760,323 759,327 755,331 751,333 736,333 735,337 734,338 734,341 733,342 733,346 735,346 736,347 750,348 751,347 755,347 762,344 768,339 774,327 774,323 775,322 775,299 774,298 774,294 773,293 773,291 770,285 764,279 757,277 Z M 748,290 754,290 758,293 760,297 760,307 759,308 747,308 743,304 743,302 742,301 743,299 743,296 Z M 374,295 374,303 375,304 376,310 378,312 378,313 384,319 390,322 393,322 394,323 429,323 430,322 435,322 436,321 443,321 444,322 448,322 449,323 547,323 548,322 553,321 556,318 557,318 562,308 562,276 551,278 548,280 548,305 545,308 456,308 455,306 457,304 457,302 458,301 458,289 457,288 457,286 454,281 448,275 441,273 440,272 434,272 433,273 427,274 418,282 415,289 415,300 416,301 417,305 419,307 418,308 396,308 392,306 390,304 389,300 388,299 388,293 391,286 390,285 377,285 377,287 375,290 375,294 Z M 434,286 439,286 441,287 443,289 445,293 445,297 444,298 444,300 443,302 439,305 434,305 432,304 428,299 428,292 429,290 Z M 687,251 684,255 684,259 685,261 689,264 695,264 698,261 698,259 699,258 699,256 697,252 694,250 689,250 Z M 576,253 576,275 575,276 575,278 576,279 576,283 575,284 575,305 576,306 576,310 577,311 577,313 579,315 579,316 583,320 587,322 590,322 591,323 702,323 703,322 708,321 710,319 711,319 717,311 717,309 719,305 719,294 718,293 718,290 715,284 707,276 703,274 700,274 699,273 686,273 685,274 683,274 680,276 676,277 673,280 672,280 666,286 665,288 664,287 664,250 655,251 654,252 651,252 650,253 650,307 649,308 593,308 590,305 590,293 589,292 589,288 590,287 590,268 589,267 590,265 590,251 589,250 587,250 586,251 582,251 581,252 578,252 Z M 705,296 705,301 704,302 704,304 700,308 665,308 664,307 668,300 676,292 686,287 696,287 700,289 703,292 Z M 436,250 435,251 433,251 430,254 429,256 429,260 430,262 434,265 439,265 441,263 442,263 444,259 444,256 440,251 Z M 548,248 544,252 544,254 543,255 543,260 544,261 544,263 540,265 540,271 548,271 549,270 562,270 564,269 564,262 554,262 551,259 551,256 554,254 556,254 558,256 560,256 562,254 562,250 558,247 550,247 Z M 805,1 804,2 798,3 789,8 786,11 785,11 777,20 771,34 771,39 770,40 770,48 771,49 771,54 772,55 772,58 776,66 781,72 781,73 789,80 792,81 794,83 796,83 802,86 806,86 807,87 820,87 821,86 825,86 831,83 833,83 835,81 838,80 845,74 845,73 849,69 849,68 853,63 853,61 855,58 856,52 857,51 857,36 856,35 856,31 854,28 853,24 851,22 849,18 840,9 839,9 834,5 827,3 826,2 824,2 823,1 816,1 815,0 813,0 812,1 Z";
+const MASAA_IDENTITY_MINT_PATH = "M 257 476 L 260 502 L 274 527 L 292 542 L 316 550 L 335 550 L 363 541 L 421 496 L 437 489 L 459 491 L 498 519 L 528 529 L 747 529 L 780 515 L 789 522 L 807 529 L 830 528 L 854 516 L 869 526 L 890 530 L 907 527 L 928 515 L 940 524 L 953 529 L 978 531 L 999 527 L 1012 521 L 1037 500 L 1049 517 L 1069 534 L 1093 544 L 1122 546 L 1137 543 L 1158 533 L 1178 515 L 1185 505 L 1195 477 L 1195 432 L 1190 414 L 1181 399 L 1157 378 L 1130 368 L 1098 368 L 1079 374 L 1055 389 L 1038 407 L 993 471 L 978 481 L 965 482 L 955 477 L 947 464 L 946 391 L 938 380 L 931 377 L 920 377 L 908 386 L 905 394 L 905 470 L 902 476 L 894 482 L 881 480 L 875 472 L 874 408 L 870 399 L 857 391 L 842 394 L 834 405 L 833 469 L 824 481 L 813 482 L 804 475 L 802 469 L 802 408 L 793 394 L 779 391 L 768 396 L 762 405 L 761 461 L 757 470 L 750 477 L 737 482 L 669 482 L 652 476 L 635 460 L 630 448 L 630 435 L 634 426 L 645 417 L 661 415 L 671 419 L 685 436 L 694 440 L 705 440 L 714 436 L 722 427 L 725 406 L 717 389 L 699 373 L 673 364 L 651 364 L 625 372 L 608 383 L 593 399 L 584 416 L 580 434 L 581 448 L 588 468 L 597 479 L 596 482 L 531 480 L 516 473 L 495 454 L 475 442 L 456 437 L 434 437 L 414 442 L 393 453 L 343 498 L 335 502 L 322 502 L 310 493 L 305 483 L 304 438 L 302 431 L 294 426 L 284 430 L 269 445 L 260 462 Z M 1109 417 L 1125 419 L 1137 426 L 1145 435 L 1151 450 L 1150 467 L 1144 479 L 1133 490 L 1116 496 L 1104 495 L 1090 488 L 1080 477 L 1075 464 L 1075 449 L 1083 432 L 1093 423 Z M 1141 298 L 1136 292 L 1128 290 L 1048 319 L 1041 324 L 1039 337 L 1044 343 L 1052 345 L 1135 316 L 1141 309 Z";
+const MASAA_IDENTITY_GOLD_PATH = "M 378 688 L 378 746 L 383 755 L 392 761 L 545 761 L 553 757 L 560 747 L 561 688 L 524 696 L 493 699 L 490 712 L 481 718 L 454 717 L 448 711 L 446 699 L 422 697 Z M 1053 665 L 1035 663 L 1025 666 L 1014 674 L 1007 685 L 1004 695 L 1004 712 L 1010 726 L 1026 737 L 1052 738 L 1045 748 L 1036 753 L 1012 757 L 1012 776 L 1014 777 L 1035 776 L 1053 769 L 1064 760 L 1072 747 L 1076 731 L 1075 692 L 1066 674 Z M 1031 687 L 1044 685 L 1052 692 L 1053 716 L 1035 716 L 1027 711 L 1024 699 Z M 817 667 L 795 667 L 795 709 L 791 715 L 786 717 L 758 717 L 759 696 L 754 681 L 743 669 L 729 663 L 711 664 L 701 669 L 693 677 L 686 693 L 687 717 L 648 717 L 637 713 L 629 700 L 629 672 L 608 671 L 607 706 L 614 724 L 628 736 L 641 740 L 793 740 L 805 736 L 812 729 L 816 720 Z M 714 686 L 728 685 L 736 692 L 738 707 L 733 715 L 721 717 L 708 710 L 706 698 Z M 945 626 L 938 632 L 937 640 L 943 648 L 952 649 L 959 644 L 960 634 L 955 627 Z M 714 627 L 709 633 L 709 642 L 715 648 L 726 648 L 732 640 L 730 630 L 724 626 Z M 840 621 L 840 717 L 845 730 L 850 735 L 863 740 L 962 740 L 975 736 L 983 729 L 988 719 L 990 701 L 986 683 L 978 672 L 964 664 L 945 663 L 931 668 L 918 679 L 915 678 L 915 621 L 893 622 L 893 711 L 886 717 L 867 716 L 862 711 L 862 623 L 859 620 Z M 967 695 L 968 708 L 962 716 L 914 716 L 923 698 L 940 686 L 956 685 Z M 798 610 L 789 619 L 789 636 L 782 642 L 783 649 L 820 649 L 821 638 L 819 636 L 806 636 L 801 631 L 804 623 L 817 623 L 820 612 L 814 609 Z M 378 650 L 378 671 L 380 673 L 447 685 L 449 675 L 455 670 L 483 670 L 490 675 L 492 685 L 542 678 L 561 671 L 561 653 L 557 643 L 546 635 L 516 634 L 512 610 L 505 602 L 493 597 L 441 598 L 428 608 L 424 618 L 423 634 L 392 635 L 382 642 Z M 441 620 L 448 614 L 490 614 L 498 621 L 498 633 L 443 635 Z M 298 352 L 279 362 L 272 373 L 270 389 L 275 403 L 282 411 L 296 418 L 309 418 L 320 414 L 330 405 L 336 392 L 336 378 L 331 366 L 323 358 L 309 352 Z";
 
-function telegramMasaaWordmarkSvg(x, y, width) {
-  const scale = Number(width) / 919;
-  return `<g transform="translate(${Number(x).toFixed(2)},${Number(y).toFixed(2)}) scale(${scale.toFixed(6)})">
-  <path d="${MASAA_WORDMARK_GREEN_PATH}" fill="#0F6B4F" fill-rule="evenodd"/>
-  <path d="${MASAA_WORDMARK_YELLOW_PATH}" fill="#F6B744" fill-rule="evenodd"/>
+function telegramMasaaIdentitySvg(x, y, width) {
+  const scale = Number(width) / 939;
+  return `<g transform="translate(${Number(x).toFixed(2)},${Number(y).toFixed(2)}) scale(${scale.toFixed(6)}) translate(-257,-290)">
+  <path d="${MASAA_IDENTITY_MINT_PATH}" fill="url(#masaaMint)" fill-rule="evenodd"/>
+  <path d="${MASAA_IDENTITY_GOLD_PATH}" fill="url(#masaaGold)" fill-rule="evenodd"/>
 </g>`;
 }
 
@@ -4907,45 +4907,62 @@ function telegramJobCardSvg(job, logoDataUri = "") {
   const initial = xmlEscape(jobCardText(job.company || "م", 1) || "م");
   const logo = clean(logoDataUri);
   const logoMarkup = logo
-    ? `<rect x="510" y="292" width="180" height="180" rx="40" fill="#ffffff" stroke="#dce9e2" stroke-width="3"/><image x="535" y="317" width="130" height="130" href="${xmlEscape(logo)}" preserveAspectRatio="xMidYMid meet"/>`
-    : `<rect x="510" y="292" width="180" height="180" rx="40" fill="#f8faf9" stroke="#dce9e2" stroke-width="3"/><circle cx="600" cy="382" r="55" fill="#eaf4ef"/><text x="600" y="405" text-anchor="middle" font-size="55" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F">${initial}</text>`;
+    ? `<rect x="515" y="428" width="170" height="170" rx="38" fill="#FFFFFF" stroke="#D8E4DE" stroke-width="3"/><image x="540" y="453" width="120" height="120" href="${xmlEscape(logo)}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<rect x="515" y="428" width="170" height="170" rx="38" fill="#F4F8F6" stroke="#D8E4DE" stroke-width="3"/><circle cx="600" cy="513" r="52" fill="#E7F4EE"/><text x="600" y="534" text-anchor="middle" font-size="52" font-weight="700" font-family="Noto Kufi Arabic" fill="#0D6B50">${initial}</text>`;
 
-  const titleStartY = titleLines.length > 1 ? 678 : 714;
+  const titleStartY = titleLines.length > 1 ? 744 : 782;
   const titleMarkup = titleLines.map((line, index) =>
-    `<text x="600" y="${titleStartY + index * 58}" text-anchor="middle" font-size="44" font-weight="700" font-family="Noto Kufi Arabic" fill="#0B4F3B" direction="rtl">${line}</text>`
+    `<text x="600" y="${titleStartY + index * 56}" text-anchor="middle" font-size="44" font-weight="700" font-family="Noto Kufi Arabic" fill="#0A5B45" direction="rtl">${line}</text>`
   ).join("");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <rect width="1200" height="1200" fill="#F5F7F6"/>
-  <rect x="0" y="0" width="1200" height="190" fill="#FFFFFF"/>
-  <rect x="0" y="184" width="1200" height="6" fill="#F6B744"/>
-  ${telegramMasaaWordmarkSvg(816, 28, 314)}
-  <rect x="70" y="58" width="360" height="72" rx="36" fill="#EAF4EF"/>
-  <text x="250" y="103" text-anchor="middle" font-size="26" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">✓ متحقق من المصدر الرسمي</text>
+  <defs>
+    <linearGradient id="masaaBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#031C18"/>
+      <stop offset="100%" stop-color="#07342C"/>
+    </linearGradient>
+    <linearGradient id="masaaMint" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#68E8BC"/>
+      <stop offset="100%" stop-color="#43DFAF"/>
+    </linearGradient>
+    <linearGradient id="masaaGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFD056"/>
+      <stop offset="100%" stop-color="#F6B52E"/>
+    </linearGradient>
+  </defs>
 
-  <rect x="60" y="220" width="1080" height="900" rx="44" fill="#FFFFFF" stroke="#DCE9E2" stroke-width="3"/>
+  <rect width="1200" height="1200" fill="url(#masaaBg)"/>
+  <circle cx="1080" cy="105" r="145" fill="#0A463A" opacity="0.32"/>
+  <circle cx="120" cy="250" r="115" fill="#0B3D34" opacity="0.28"/>
+  ${telegramMasaaIdentitySvg(250, 18, 700)}
+
+  <rect x="70" y="306" width="360" height="62" rx="31" fill="#0B3E34" stroke="#1D5C4D" stroke-width="2"/>
+  <text x="250" y="347" text-anchor="middle" font-size="23" font-weight="700" font-family="Noto Kufi Arabic" fill="#64E3B7" direction="rtl">✓ متحقق من المصدر الرسمي</text>
+
+  <rect x="50" y="396" width="1100" height="754" rx="46" fill="#FBFCFA" stroke="#DCE6E1" stroke-width="3"/>
   ${logoMarkup}
-  <text x="600" y="530" text-anchor="middle" font-size="37" font-weight="700" font-family="Noto Kufi Arabic" fill="#263A33" direction="rtl">${company}</text>
-  <rect x="470" y="558" width="260" height="52" rx="26" fill="#F1F7F4"/>
-  <text x="600" y="593" text-anchor="middle" font-size="22" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">${sector}</text>
+
+  <text x="600" y="642" text-anchor="middle" font-size="37" font-weight="700" font-family="Noto Kufi Arabic" fill="#263B34" direction="rtl">${company}</text>
+  <rect x="475" y="668" width="250" height="50" rx="25" fill="#EAF5F0"/>
+  <text x="600" y="702" text-anchor="middle" font-size="22" font-weight="700" font-family="Noto Kufi Arabic" fill="#0D6B50" direction="rtl">${sector}</text>
 
   ${titleMarkup}
 
-  <rect x="105" y="820" width="300" height="120" rx="24" fill="#F6F9F7"/>
-  <text x="255" y="858" text-anchor="middle" font-size="21" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">الموقع</text>
-  <text x="255" y="907" text-anchor="middle" font-size="25" font-family="Noto Kufi Arabic" fill="#33473F" direction="rtl">${city}</text>
+  <rect x="105" y="865" width="300" height="112" rx="24" fill="#F1F7F4"/>
+  <text x="255" y="901" text-anchor="middle" font-size="20" font-weight="700" font-family="Noto Kufi Arabic" fill="#0D6B50" direction="rtl">الموقع</text>
+  <text x="255" y="945" text-anchor="middle" font-size="24" font-family="Noto Kufi Arabic" fill="#364B43" direction="rtl">${city}</text>
 
-  <rect x="450" y="820" width="300" height="120" rx="24" fill="#F6F9F7"/>
-  <text x="600" y="858" text-anchor="middle" font-size="21" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">القطاع</text>
-  <text x="600" y="907" text-anchor="middle" font-size="25" font-family="Noto Kufi Arabic" fill="#33473F" direction="rtl">${sector}</text>
+  <rect x="450" y="865" width="300" height="112" rx="24" fill="#F1F7F4"/>
+  <text x="600" y="901" text-anchor="middle" font-size="20" font-weight="700" font-family="Noto Kufi Arabic" fill="#0D6B50" direction="rtl">القطاع</text>
+  <text x="600" y="945" text-anchor="middle" font-size="24" font-family="Noto Kufi Arabic" fill="#364B43" direction="rtl">${sector}</text>
 
-  <rect x="795" y="820" width="300" height="120" rx="24" fill="#F6F9F7"/>
-  <text x="945" y="858" text-anchor="middle" font-size="21" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">آخر موعد</text>
-  <text x="945" y="907" text-anchor="middle" font-size="24" font-family="Noto Kufi Arabic" fill="#33473F" direction="rtl">${expiry}</text>
+  <rect x="795" y="865" width="300" height="112" rx="24" fill="#F1F7F4"/>
+  <text x="945" y="901" text-anchor="middle" font-size="20" font-weight="700" font-family="Noto Kufi Arabic" fill="#0D6B50" direction="rtl">آخر موعد</text>
+  <text x="945" y="945" text-anchor="middle" font-size="23" font-family="Noto Kufi Arabic" fill="#364B43" direction="rtl">${expiry}</text>
 
-  <rect x="270" y="980" width="660" height="84" rx="42" fill="#0F6B4F"/>
-  <text x="600" y="1033" text-anchor="middle" font-size="30" font-weight="700" font-family="Noto Kufi Arabic" fill="#FFFFFF" direction="rtl">التقديم من المصدر الرسمي ←</text>
-  <text x="600" y="1092" text-anchor="middle" font-size="20" font-family="Noto Kufi Arabic" fill="#71827A" direction="rtl">مَسعى — التقديم يتم لدى الجهة المعلنة</text>
+  <rect x="260" y="1012" width="680" height="82" rx="41" fill="#0A5B45" stroke="#F6B744" stroke-width="3"/>
+  <text x="600" y="1064" text-anchor="middle" font-size="29" font-weight="700" font-family="Noto Kufi Arabic" fill="#FFFFFF" direction="rtl">التقديم من المصدر الرسمي ←</text>
+  <text x="600" y="1124" text-anchor="middle" font-size="19" font-family="Noto Kufi Arabic" fill="#657A71" direction="rtl">مَسعى — التقديم يتم لدى الجهة المعلنة</text>
 </svg>`;
 }
 
