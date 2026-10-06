@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.26.0-telegram-discovery-seo";
+const VERSION = "3.27.0-telegram-growth-funnel";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4995,11 +4995,19 @@ async function handleTelegramWebhook(request, env) {
   const argument = clean(parts.join(" "));
 
   if (command === "/start" || command === "/help") {
+    const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: true });
+    const keyboard = [
+      [{ text: "💼 تصفح الوظائف", url: MASAA_SITE_URL }]
+    ];
+    if (channelUrl) {
+      keyboard.unshift([{ text: "📢 انضم لقناة مَسعى", url: channelUrl }]);
+    }
+
     const sent = await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text: telegramStartText(),
       disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: [[{ text: "💼 تصفح الوظائف", url: MASAA_SITE_URL }]] }
+      reply_markup: { inline_keyboard: keyboard }
     });
     return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
   }
@@ -5015,10 +5023,17 @@ async function handleTelegramWebhook(request, env) {
   if (command === "/alerts") {
     await telegramEnableAlerts(env, chatId);
     const subscriber = await telegramGetSubscriber(env, chatId);
-    const sent = await telegramApi(env, "sendMessage", {
+    const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: true });
+    const payload = {
       chat_id: chatId,
       text: "🔔 تم تفعيل تنبيهات الوظائف.\n\nلن أعيد إرسال نفس الوظيفة.\n\n" + telegramSettingsText(subscriber)
-    });
+    };
+    if (channelUrl) {
+      payload.reply_markup = {
+        inline_keyboard: [[{ text: "📢 تابع قناة مَسعى", url: channelUrl }]]
+      };
+    }
+    const sent = await telegramApi(env, "sendMessage", payload);
     return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
   }
 
