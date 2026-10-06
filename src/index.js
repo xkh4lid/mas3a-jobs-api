@@ -4754,6 +4754,43 @@ async function telegramMarkDelivered(env, jobId, target) {
     .bind(String(jobId), String(target), nowIso()).run();
 }
 
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function jobCardText(value, max = 54) {
+  const text = clean(value);
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+function telegramJobCardSvg(job) {
+  const title = xmlEscape(jobCardText(job.title || "فرصة وظيفية", 58));
+  const company = xmlEscape(jobCardText(job.company || "جهة موثوقة", 48));
+  const city = xmlEscape(jobCardText(job.city || job.region || (job.remote ? "عن بُعد" : "السعودية"), 30));
+  const sector = xmlEscape(jobCardText(job.sector || "وظائف", 22));
+  const expiry = xmlEscape(jobCardText(job.expires_at || "راجع المصدر الرسمي", 28));
+  const initial = xmlEscape(jobCardText(company, 1) || "م");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <rect width="1200" height="1200" fill="#f7faf6"/>
+  <path d="M0 0h1200v170H0z" fill="#0b4f3b"/>
+  <circle cx="1040" cy="85" r="50" fill="#f3c64e"/><text x="1040" y="103" text-anchor="middle" font-size="52" font-family="Arial,sans-serif" fill="#0b4f3b">م</text>
+  <text x="950" y="75" text-anchor="end" font-size="48" font-weight="700" font-family="Arial,sans-serif" fill="white" direction="rtl">مَسعى وظائف</text>
+  <text x="950" y="125" text-anchor="end" font-size="24" font-family="Arial,sans-serif" fill="#d8eee5" direction="rtl">فرص موثقة من المصدر الرسمي</text>
+  <rect x="70" y="220" width="1060" height="850" rx="42" fill="white" stroke="#dce9e2" stroke-width="3"/>
+  <circle cx="600" cy="355" r="90" fill="#e8f3ed"/><text x="600" y="385" text-anchor="middle" font-size="86" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b">${initial}</text>
+  <text x="600" y="490" text-anchor="middle" font-size="38" font-weight="700" font-family="Arial,sans-serif" fill="#263a33" direction="rtl">${company}</text>
+  <rect x="430" y="525" width="340" height="54" rx="27" fill="#e8f3ed"/><text x="600" y="562" text-anchor="middle" font-size="25" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">✓ المصدر الرسمي</text>
+  <text x="600" y="680" text-anchor="middle" font-size="48" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">${title}</text>
+  <rect x="120" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="390" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">الموقع</text><text x="390" y="846" text-anchor="end" font-size="27" font-family="Arial,sans-serif" fill="#3e514a" direction="rtl">${city}</text>
+  <rect x="450" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="720" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">القطاع</text><text x="720" y="846" text-anchor="end" font-size="27" font-family="Arial,sans-serif" fill="#3e514a" direction="rtl">${sector}</text>
+  <rect x="780" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="1050" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Arial,sans-serif" fill="#0b4f3b" direction="rtl">آخر موعد</text><text x="1050" y="846" text-anchor="end" font-size="25" font-family="Arial,sans-serif" fill="#3e514a" direction="rtl">${expiry}</text>
+  <rect x="260" y="935" width="680" height="82" rx="41" fill="#0b4f3b"/><text x="600" y="987" text-anchor="middle" font-size="30" font-weight="700" font-family="Arial,sans-serif" fill="white" direction="rtl">التقديم من المصدر الرسمي</text>
+  <text x="600" y="1140" text-anchor="middle" font-size="24" font-family="Arial,sans-serif" fill="#60736b" direction="rtl">مَسعى — نتحقق من الوظيفة قبل نشرها</text>
+</svg>`;
+}
+
 function telegramJobCardUrl(env, job) {
   const base = clean(env.TELEGRAM_JOB_CARD_BASE_URL || "");
   if (!base || !job?.id) return "";
@@ -5137,6 +5174,26 @@ async function handleRequest(request, env) {
     }
   }
 
+  if (request.method === "GET" && path === "/telegram/job-card") {
+    try {
+      const id = clean(url.searchParams.get("job"));
+      if (!id || id.length > 180) return new Response("Not found", { status: 404, headers: securityHeaders() });
+      const result = await getJobById(id, env);
+      if (!result.ok) return new Response("Not found", { status: 404, headers: securityHeaders() });
+      return new Response(telegramJobCardSvg(result.job), {
+        status: 200,
+        headers: {
+          ...securityHeaders(),
+          "Content-Type": "image/svg+xml; charset=utf-8",
+          "Cache-Control": "public, max-age=300, s-maxage=1800",
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        }
+      });
+    } catch (error) {
+      return internalError(error, env);
+    }
+  }
+
   if (request.method === "GET" && path === "/telegram/status") {
     try {
       await ensureTelegramStorage(env);
@@ -5283,7 +5340,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg };
 
 export default {
   async fetch(request, env) {
