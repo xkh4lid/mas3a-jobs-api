@@ -15,7 +15,8 @@ import {
   scheduledSourceKeyForMinute,
   isIncompleteArabicJobTitle,
   jobTitleOverrideFromUrl,
-  telegramJobCardSvg
+  telegramJobCardSvg,
+  telegramCompanyDomain
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -172,4 +173,21 @@ test("renders a safe dynamic Telegram SVG job card", () => {
   assert.match(svg, /شركة &amp; موثوقة/);
   assert.doesNotMatch(svg, /<اختبار>/);
   assert.match(svg, /التقديم من المصدر الرسمي/);
+});
+
+
+test("resolves company domains for Telegram card logos", () => {
+  assert.equal(telegramCompanyDomain({ source_key: "acwa-power", company: "ACWA Power" }), "acwapower.com");
+  assert.equal(telegramCompanyDomain({ company: "وزارة الدفاع", apply_url: "https://tajnid.mod.gov.sa/" }), "mod.gov.sa");
+  assert.equal(telegramCompanyDomain({ company: "شركة مثال", apply_url: "https://careers.example.sa/job/1" }), "example.sa");
+});
+
+test("embeds a safe company mark in the Telegram SVG when provided", () => {
+  const svg = telegramJobCardSvg(
+    { title: "مهندس", company: "شركة مثال", city: "الرياض", sector: "خاص" },
+    "data:image/png;base64,AAAA"
+  );
+  assert.match(svg, /<image /);
+  assert.match(svg, /data:image\/png;base64,AAAA/);
+  assert.match(svg, /Noto Kufi Arabic/);
 });
