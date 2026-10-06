@@ -2654,12 +2654,17 @@ async function runSourceBatch(env, sourceKey) {
     detailAttempts: 2
   });
 
+  const rapidResults = [];
+  for (const militarySource of MILITARY_NEWS_SOURCES.filter((item) => item.rapid)) {
+    rapidResults.push(await syncMilitaryNewsSource(env, militarySource));
+  }
+
   const summary = {
-    sourcesChecked: 1,
-    jobsSeen: result.jobsSeen || 0,
-    jobsAdded: result.added || 0,
-    jobsUpdated: result.updated || 0,
-    errors: result.errors || 0
+    sourcesChecked: 1 + rapidResults.length,
+    jobsSeen: (result.jobsSeen || 0) + rapidResults.reduce((sum, item) => sum + (item.jobsSeen || 0), 0),
+    jobsAdded: (result.added || 0) + rapidResults.reduce((sum, item) => sum + (item.added || 0), 0),
+    jobsUpdated: (result.updated || 0) + rapidResults.reduce((sum, item) => sum + (item.updated || 0), 0),
+    errors: (result.errors || 0) + rapidResults.reduce((sum, item) => sum + (item.errors || 0), 0)
   };
 
   const finishedAt = await finishSyncRun(env, runId, summary);
@@ -2670,12 +2675,13 @@ async function runSourceBatch(env, sourceKey) {
     source: sourceKey,
     started_at: startedAt,
     finished_at: finishedAt,
-    sources_checked: 1,
+    sources_checked: summary.sourcesChecked,
     jobs_seen: summary.jobsSeen,
     jobs_added: summary.jobsAdded,
     jobs_updated: summary.jobsUpdated,
     errors: summary.errors,
-    result
+    result,
+    rapid_military_results: rapidResults
   };
 }
 
