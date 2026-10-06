@@ -22,6 +22,83 @@ const SUCCESSFACTORS_SOURCES = [
       "https://careers.kaust.edu.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
       "https://careers.kaust.edu.sa/KAUST/go/KAUST-Jobs/2989101/?q=&sortColumn=referencedate&sortDirection=desc"
     ]
+  },
+  {
+    key: "saudia",
+    name: "Saudia Group Careers",
+    company: "Saudia Group",
+    companyAr: "مجموعة السعودية",
+    sector: "خاص",
+    host: "careers.saudia.com",
+    listingUrls: [
+      "https://careers.saudia.com/viewalljobs/?locale=ar_SA"
+    ]
+  },
+  {
+    key: "aramco",
+    name: "Saudi Aramco Careers",
+    company: "Saudi Aramco",
+    companyAr: "أرامكو السعودية",
+    sector: "خاص",
+    host: "careers.aramco.com",
+    listingUrls: [
+      "https://careers.aramco.com/saudi/go/For-Saudi-Applicants/7717723/?q=&sortColumn=referencedate&sortDirection=desc"
+    ]
+  },
+  {
+    key: "acwa-power",
+    name: "ACWA Power Careers",
+    company: "ACWA Power",
+    companyAr: "أكوا باور",
+    sector: "خاص",
+    host: "careers.acwapower.com",
+    listingUrls: [
+      "https://careers.acwapower.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ]
+  },
+  {
+    key: "spimaco",
+    name: "SPIMACO Careers",
+    company: "SPIMACO",
+    companyAr: "سبيماكو الدوائية",
+    sector: "خاص",
+    host: "careers.spimaco.com.sa",
+    listingUrls: [
+      "https://careers.spimaco.com.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ]
+  },
+  {
+    key: "sab",
+    name: "Saudi Awwal Bank Careers",
+    company: "Saudi Awwal Bank",
+    companyAr: "البنك السعودي الأول",
+    sector: "خاص",
+    host: "careers.sab.com",
+    listingUrls: [
+      "https://careers.sab.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ]
+  },
+  {
+    key: "jhah",
+    name: "Johns Hopkins Aramco Healthcare Careers",
+    company: "Johns Hopkins Aramco Healthcare",
+    companyAr: "جونز هوبكنز أرامكو للرعاية الصحية",
+    sector: "خاص",
+    host: "careers.jhah.com",
+    listingUrls: [
+      "https://careers.jhah.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ]
+  },
+  {
+    key: "sipchem",
+    name: "SIPCHEM Careers",
+    company: "SIPCHEM",
+    companyAr: "سبكيم",
+    sector: "خاص",
+    host: "career.sipchem.com",
+    listingUrls: [
+      "https://career.sipchem.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ]
   }
 ];
 
@@ -37,16 +114,7 @@ const MILITARY_NEWS_SOURCES = [
     ],
     articlePath: /\/MediaAffairs\/MONGNews\/\d+\/Pages\/[^?#]+\.aspx/i,
     applyHosts: ["jobs.sang.gov.sa"],
-    applyUrl: "https://jobs.sang.gov.sa/",
-    keywords: [
-      "فتح باب القبول",
-      "فتح باب التسجيل",
-      "القبول والتسجيل",
-      "الراغبين في الالتحاق بالخدمة العسكرية",
-      "الالتحاق بالخدمة العسكرية",
-      "التجنيد",
-      "وظائف عسكرية"
-    ]
+    keywords: ["القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "رتبة", "الالتحاق بالخدمة العسكرية"]
   }
 ];
 
@@ -55,45 +123,77 @@ const SOURCE_CATALOG = [
     key: "jadarat",
     name: "جدارات",
     url: "https://jadarat.sa/",
-    source_type: "official_portal",
+    source_type: "official_portal_monitor",
     sector: "حكومي",
     enabled: 1,
-    supported: 0,
-    status: "portal"
+    supported: 1,
+    status: "monitor_only"
   },
   {
     key: "absher-military",
     name: "أبشر توظيف",
     url: "https://jobs.sa/",
-    source_type: "official_portal",
+    source_type: "official_portal_monitor",
     sector: "عسكري",
     enabled: 1,
-    supported: 0,
-    status: "portal"
+    supported: 1,
+    status: "monitor_only"
   },
   {
     key: "mod-tajnid",
     name: "التجنيد الموحد - وزارة الدفاع",
     url: "https://tajnid.mod.gov.sa/",
-    source_type: "official_portal",
+    source_type: "official_portal_monitor",
     sector: "عسكري",
     enabled: 1,
-    supported: 0,
-    status: "portal"
+    supported: 1,
+    status: "monitor_only"
   },
   {
     key: "sang-jobs",
     name: "بوابة توظيف الحرس الوطني",
     url: "https://jobs.sang.gov.sa/",
-    source_type: "official_portal",
+    source_type: "official_portal_monitor",
     sector: "عسكري",
     enabled: 1,
-    supported: 0,
-    status: "portal"
+    supported: 1,
+    status: "monitor_only"
+  },
+  {
+    key: "moh-jobs",
+    name: "وزارة الصحة - التوظيف",
+    url: "https://www.moh.gov.sa/ministry/about/pages/work-for-us.aspx",
+    source_type: "official_listing",
+    sector: "حكومي",
+    enabled: 1,
+    supported: 1,
+    status: "monitor_only"
+  }
+
+];
+
+// البوابات التالية قد تكون تطبيقات مغلقة/تفاعلية أو محمية، لذلك يراقبها
+// مَسعى تلقائيًا بدون اختلاق وظائف غير قابلة للتحقق. عند توفر إعلان علني
+// قابل للاستخراج يضاف له Adapter مستقل بدل الاعتماد على التخمين.
+const PORTAL_MONITOR_SOURCES = SOURCE_CATALOG.filter((source) =>
+  ["jadarat", "absher-military", "mod-tajnid", "sang-jobs"].includes(source.key)
+);
+
+const OFFICIAL_LISTING_SOURCES = [
+  {
+    key: "moh-jobs",
+    name: "وزارة الصحة - اعمل معنا",
+    company: "وزارة الصحة",
+    companyAr: "وزارة الصحة",
+    sector: "حكومي",
+    url: "https://www.moh.gov.sa/ministry/about/pages/work-for-us.aspx",
+    listingUrls: ["https://www.moh.gov.sa/ministry/about/pages/work-for-us.aspx"],
+    parser: "moh-current",
+    sourceType: "official_listing"
   }
 ];
 
-const VERSION = "2.2.1";
+const VERSION = "3.1.0";
 const LOCALIZATION_VERSION = "ar-v3";
 const nowIso = () => new Date().toISOString();
 
@@ -149,13 +249,28 @@ const sha256 = async (value) => {
 };
 
 function externalIdFromUrl(url) {
-  const match = String(url).match(/\/(\d{6,})\/?(?:[?#]|$)/);
+  const match = String(url).match(/\/(\d{4,})\/?(?:[?#]|$)/);
   return match?.[1] || null;
 }
 
+function normalizeDigits(value) {
+  const arabic = "٠١٢٣٤٥٦٧٨٩";
+  const persian = "۰۱۲۳۴۵۶۷۸۹";
+  return String(value ?? "")
+    .replace(/[٠-٩]/g, (d) => String(arabic.indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String(persian.indexOf(d)));
+}
+
 function parseDate(value) {
-  const text = clean(value);
+  const text = clean(normalizeDigits(value)).replace(/[\u200e\u200f\u202a-\u202e]/g, "");
   if (!text) return null;
+
+  const dmy = text.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](20\d{2})\b/);
+  if (dmy) {
+    const iso = `${dmy[3]}-${String(dmy[2]).padStart(2, "0")}-${String(dmy[1]).padStart(2, "0")}`;
+    const date = new Date(`${iso}T12:00:00Z`);
+    if (!Number.isNaN(date.getTime())) return iso;
+  }
 
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return null;
@@ -207,7 +322,7 @@ function discoverJobUrls(html, source, baseUrl) {
       const parsed = new URL(url);
       if (parsed.hostname !== source.host) return;
       if (!/\/job\//i.test(parsed.pathname)) return;
-      if (!/\/\d{6,}\/?$/i.test(parsed.pathname)) return;
+      if (!/\/\d{4,}\/?$/i.test(parsed.pathname)) return;
       found.add(parsed.href);
     } catch {
       // Ignore invalid URLs.
@@ -222,7 +337,7 @@ function discoverJobUrls(html, source, baseUrl) {
   }
 
   const rawJobRegex =
-    /((?:https?:\/\/[^"'<>\\\s]+)?\/job\/[^"'<>\\\s?#]+\/\d{6,}\/?)/gi;
+    /((?:https?:\/\/[^"'<>\\\s]+)?\/job\/[^"'<>\\\s?#]+\/\d{4,}\/?)/gi;
 
   while ((match = rawJobRegex.exec(normalized))) {
     add(match[1]);
@@ -259,6 +374,8 @@ function pageExplicitlyHasNoJobs(html) {
     "there are currently no open positions",
     "0 most recent jobs",
     "no jobs found",
+    "no job categories currently exist",
+    "0 jobs search results",
     "لا توجد حاليًا أي مناصب شاغرة",
     "لا توجد وظائف",
     "لا توجد فرص"
@@ -308,60 +425,20 @@ function removeBoilerplate(value) {
       .replace(/Apply now\s*»?/gi, " ")
       .replace(/Find similar jobs/gi, " ")
       .replace(/View Profile/gi, " ")
-      .replace(/When you visit any website[\s\S]{0,1800}?(?:cookies?|privacy)/gi, " ")
-      .replace(/Your cookie preferences[\s\S]{0,1600}?(?:cookies?|privacy)/gi, " ")
-      .replace(/This website uses cookies[\s\S]{0,1600}?(?:Accept|Reject|Settings)/gi, " ")
-      .replace(/Cookie Preferences[\s\S]{0,1200}?(?:Accept|Reject|Settings)/gi, " ")
-      .replace(/Manage Preferences[\s\S]{0,1200}?(?:Accept|Reject|Settings)/gi, " ")
   );
 }
 
-function containsCookieNoise(value) {
-  return /(?:cookies?|cookie preferences|privacy preferences|local storage|browser storage|manage preferences|accept cookies|reject cookies)/i.test(String(value ?? ""));
-}
-
-function sanitizeQualification(value) {
-  const raw = clean(value);
-  if (!raw || containsCookieNoise(raw)) return null;
-  return clean(
-    removeBoilerplate(raw)
-      .replace(/\b(?:Experience requirement|Years of Experience|Additional Education|Certifications|Apply now)\b[\s\S]*$/i, " ")
-  ).slice(0, 420) || null;
-}
-
-function sanitizeExperience(value) {
-  const raw = clean(value);
-  if (!raw || containsCookieNoise(raw)) return null;
-  return clean(
-    removeBoilerplate(raw)
-      .replace(/\b(?:Nature of Experience|Job Band|Professional Skills|Managerial Skills|Education|Additional Education|Certifications|Apply now)\b[\s\S]*$/i, " ")
-  ).slice(0, 320) || null;
-}
-
-function markerIndex(source, marker, from = 0) {
-  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (/^[A-Za-z0-9 ]+$/.test(marker)) {
-    const regex = new RegExp(`\\b${escaped}\\b`, "ig");
-    regex.lastIndex = from;
-    const match = regex.exec(source);
-    return match ? match.index : -1;
-  }
-  return source.toLowerCase().indexOf(marker.toLowerCase(), from);
-}
-
 function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
-  const source = removeBoilerplate(String(text ?? ""));
+  const source = String(text ?? "");
+  const lower = source.toLowerCase();
   let start = -1;
   let markerLength = 0;
 
-  // Marker order is intentional: prefer specific labels before generic words.
-  // Word boundaries prevent "Education" from matching "Educational" in a job title.
   for (const marker of startMarkers) {
-    const idx = markerIndex(source, marker);
-    if (idx >= 0) {
+    const idx = lower.indexOf(marker.toLowerCase());
+    if (idx >= 0 && (start < 0 || idx < start)) {
       start = idx;
       markerLength = marker.length;
-      break;
     }
   }
 
@@ -369,7 +446,7 @@ function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
   let end = source.length;
   const from = start + markerLength;
   for (const marker of stopMarkers) {
-    const idx = markerIndex(source, marker, from);
+    const idx = lower.indexOf(marker.toLowerCase(), from);
     if (idx >= 0 && idx < end) end = idx;
   }
 
@@ -377,7 +454,7 @@ function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
 }
 
 function extractDescription(html) {
-  const text = removeBoilerplate(stripHtml(html));
+  const text = stripHtml(html);
   const summary = extractSection(
     text,
     ["Job Purpose", "About The Role", "About the Role", "Role Purpose", "Position Summary", "Job Summary", "Job Description"],
@@ -449,25 +526,25 @@ function inferEntryLevel({ title, description, experience }) {
 
 function extractDetail(html, source, url) {
   const visibleHtml = withoutScripts(html);
-  const fullText = removeBoilerplate(stripHtml(visibleHtml));
+  const fullText = stripHtml(visibleHtml);
 
   const title =
     stripHtml((visibleHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1]) ||
     visibleFieldFromHtml(visibleHtml, ["Job Title", "Title"]) ||
     clean(decodeBasicEntities((visibleHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ["", ""])[1]))
-      .replace(/\s*[-|]\s*(?:stc|kaust).*$/i, "");
+      .replace(/\s*[-|]\s*(?:stc|kaust|saudia|aramco|acwa\s*power|spimaco|saudi\s*awwal\s*bank|jhah|johns\s*hopkins|sipchem).*$/i, "");
 
   const cityRaw =
     visibleFieldFromHtml(visibleHtml, ["Location", "Primary Location", "مدينة الوظيفة", "الموقع"]) ||
     textAfterLabel(fullText, ["Location", "Primary Location", "مدينة الوظيفة", "الموقع"], 100);
 
   const qualification =
-    sanitizeQualification(visibleFieldFromHtml(visibleHtml, ["Education", "Minimum Qualifications", "Qualifications", "المؤهل", "المؤهلات"], 500)) ||
-    sanitizeQualification(extractSection(fullText, ["Minimum Qualifications", "Qualifications", "Education"], ["Experience requirement", "Years of Experience", "Experience", "Required Skills", "Preferred Skills", "Additional Education", "Certifications", "Apply now"], 500));
+    visibleFieldFromHtml(visibleHtml, ["Education", "Qualifications", "Minimum Qualifications", "المؤهل", "المؤهلات"], 500) ||
+    extractSection(fullText, ["Qualifications", "Education", "Minimum Qualifications"], ["Experience", "Required Skills", "Preferred Skills", "Apply now"], 500);
 
   const experience =
-    sanitizeExperience(visibleFieldFromHtml(visibleHtml, ["Years of Experience", "Minimum Experience", "Experience", "الخبرة"], 450)) ||
-    sanitizeExperience(extractSection(fullText, ["Years of Experience", "Minimum Experience", "Experience"], ["Nature of Experience", "Job Band", "Professional Skills", "Managerial Skills", "Skills", "Education", "Apply now"], 450));
+    visibleFieldFromHtml(visibleHtml, ["Years of Experience", "Experience", "Minimum Experience", "الخبرة"], 450) ||
+    extractSection(fullText, ["Years of Experience", "Minimum Experience", "Experience"], ["Nature of Experience", "Job Band", "Skills", "Education", "Apply now"], 450);
 
   const published =
     visibleFieldFromHtml(visibleHtml, ["Date", "Posting Date", "Date Posted", "تاريخ النشر"], 80) ||
@@ -487,9 +564,9 @@ function extractDetail(html, source, url) {
     city,
     region: null,
     work_mode: remote ? "عن بُعد" : null,
-    qualification,
+    qualification: clean(qualification) || null,
     specialization: null,
-    experience,
+    experience: clean(experience) || null,
     salary: null,
     published_at: parseDate(published),
     expires_at: null,
@@ -520,48 +597,34 @@ function findApplyUrl(html, source, fallback) {
 }
 
 function extractMilitaryAnnouncement(html, source, url) {
-  const text = removeBoilerplate(stripHtml(html));
+  const text = stripHtml(html);
+  const lower = text.toLowerCase();
+  if (!source.keywords.some((keyword) => lower.includes(keyword.toLowerCase()))) return null;
+
   const title =
     stripHtml((String(html).match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1]) ||
     clean(decodeBasicEntities((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ["", ""])[1]));
 
-  const focused = clean(`${title} ${text}`);
-  const recruitmentPatterns = [
-    /فتح\s+باب\s+(?:القبول|التسجيل)/i,
-    /القبول\s+والتسجيل/i,
-    /الراغبين\s+في\s+الالتحاق\s+بالخدمة\s+العسكرية/i,
-    /الالتحاق\s+بالخدمة\s+العسكرية/i,
-    /وظائف\s+عسكرية/i,
-    /(?:التجنيد|تجنيد)\s*(?:-|–|—)?\s*(?:رجال|نساء)?/i
-  ];
-
-  const hasRecruitmentSignal = recruitmentPatterns.some((pattern) => pattern.test(focused));
-  const hasApplicationSignal =
-    /(?:رابط\s+التقديم|التقديم\s+(?:متاح|يبدأ|عبر)|التسجيل\s+(?:متاح|يبدأ|عبر)|jobs\.sang\.gov\.sa)/i.test(focused);
-
-  // General ministry news must never become a military vacancy.
-  if (!hasRecruitmentSignal || !hasApplicationSignal) return null;
-
-  const summaryMatch = text.match(
-    /(?:تعلن|أعلنت)[\s\S]{20,900}?(?=رابط\s+التقديم|للتقديم|التقديم\s+عبر|جميع\s+الحقوق|هل\s+كانت\s+هذه\s+الصفحة\s+مفيدة|$)/i
-  );
-  if (!summaryMatch) return null;
-
+  // Some official military announcements publish Hijri dates only.
+  // We only inspect links currently surfaced by the official news listing, so when
+  // no Gregorian date is present we use first discovery time instead of guessing a
+  // Hijri conversion. This prevents old archive pages from being presented as live.
   const parsedPublishedAt = parseDmyDate(text);
   if (parsedPublishedAt && daysSince(parsedPublishedAt) > 35) return null;
-  const publishedAt = parsedPublishedAt || nowIso().slice(0, 10);
+  // لا نخمن تاريخ نشر ميلادي عندما يحتوي الإعلان على هجري فقط.
+  // discovered_at في قاعدة البيانات يبقى المرجع الثابت لأول اكتشاف.
+  const publishedAt = parsedPublishedAt || null;
 
   let expiresAt = null;
   const gregorianDeadline = text.match(/حتى\s+يوم[^\d]{0,80}(\d{1,2})\s*[\/-]\s*(\d{1,2})\s*[\/-]\s*(20\d{2})\s*م?/i);
   if (gregorianDeadline) {
     expiresAt = `${gregorianDeadline[3]}-${String(gregorianDeadline[2]).padStart(2, "0")}-${String(gregorianDeadline[1]).padStart(2, "0")}`;
-  } else {
-    expiresAt = addDays(publishedAt, 14);
   }
 
   if (expiresAt && new Date(`${expiresAt}T23:59:59Z`).getTime() < Date.now()) return null;
 
-  const summary = removeBoilerplate(summaryMatch[0]).slice(0, 520);
+  const summaryMatch = text.match(/(?:تعلن|أعلنت)([\s\S]{40,1000}?)(?:رابط التقديم|للتقديم|جميع الحقوق|هل كانت هذه الصفحة مفيدة|$)/i);
+  const summary = removeBoilerplate(summaryMatch?.[0] || text).slice(0, 650);
   const parsedUrl = new URL(url);
   const pathMatch = parsedUrl.pathname.match(/\/MONGNews\/([^/]+)\/Pages\/([^/.]+)/i);
   const slug = pathMatch ? `${pathMatch[1]}-${pathMatch[2]}` : parsedUrl.pathname.split("/").filter(Boolean).pop()?.replace(/\.aspx$/i, "") || "announcement";
@@ -582,20 +645,138 @@ function extractMilitaryAnnouncement(html, source, url) {
     expires_at: expiresAt,
     summary,
     source_url: url,
-    apply_url: findApplyUrl(html, source, source.applyUrl || "https://jobs.sang.gov.sa/"),
+    apply_url: findApplyUrl(html, source, url),
     remote: 0,
     fresh_graduate: 0,
     no_experience: 0
   };
 }
 
+function portalResponseStatus(status) {
+  if (status >= 200 && status < 400) return "monitor_only";
+  if (status === 401 || status === 403) return "restricted";
+  return "error";
+}
+
+async function syncPortalMonitorSource(env, source) {
+  try {
+    const response = await fetch(source.url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.1; +https://mas3a.pages.dev)",
+        Accept: "text/html,application/xhtml+xml"
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(12000)
+    });
+    const status = portalResponseStatus(response.status);
+    const reachable = status !== "error";
+    await upsertSource(env, { ...source, listingUrls: [source.url] }, {
+      success: reachable,
+      jobsSeen: 0,
+      newJobs: 0,
+      error: reachable ? null : `HTTP ${response.status}`,
+      status
+    }, "official_portal_monitor");
+    try { await response.body?.cancel(); } catch {}
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: reachable ? 0 : 1, status };
+  } catch (error) {
+    const message = clean(error?.message || error);
+    await upsertSource(env, { ...source, listingUrls: [source.url] }, {
+      success: false,
+      jobsSeen: 0,
+      newJobs: 0,
+      error: message,
+      status: "error"
+    }, "official_portal_monitor");
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+}
+
+function extractMohCurrentJobs(html, source) {
+  const text = stripHtml(html);
+  const currentIndex = text.indexOf("الوظائف الحالية");
+  if (currentIndex < 0) return { parsed: false, jobs: [] };
+  const previousIndex = text.indexOf("الوظائف السابقة", currentIndex + 1);
+  const section = text.slice(currentIndex, previousIndex > currentIndex ? previousIndex : Math.min(text.length, currentIndex + 5000));
+  const active = /(?:قائم|متاح|مفتوح)/.test(section);
+  if (!active) return { parsed: true, jobs: [] };
+
+  const titles = [];
+  const rx = /(إعلان\s+[^|•]{3,100}?)(?=\s+(?:من\s+بداية|إلى\s+نهاية|قائم|متاح|مفتوح|بداية\s+الإعلان|نهاية\s+الإعلان))/g;
+  let match;
+  while ((match = rx.exec(section))) {
+    const title = clean(match[1]).replace(/\s{2,}/g, " ");
+    if (title && !titles.includes(title)) titles.push(title);
+  }
+  if (!titles.length) {
+    const fallback = section.match(/(إعلان\s+[\u0600-\u06FF\s]+?)(?=\s+(?:من|إلى|قائم|متاح|مفتوح))/);
+    if (fallback?.[1]) titles.push(clean(fallback[1]));
+  }
+
+  return {
+    parsed: true,
+    jobs: titles.slice(0, 20).map((title, index) => ({
+      external_id: `moh-current-${index + 1}`,
+      title,
+      company: source.company,
+      sector: "حكومي",
+      city: "مختلف مناطق المملكة",
+      region: null,
+      work_mode: "حضوري",
+      qualification: null,
+      specialization: "صحة",
+      experience: null,
+      salary: null,
+      published_at: null,
+      expires_at: null,
+      summary: "إعلان توظيف قائم وفق صفحة «اعمل معنا» الرسمية لوزارة الصحة. راجع المصدر الأصلي للتخصصات والشروط وطريقة التقديم.",
+      source_url: source.url,
+      apply_url: source.url,
+      remote: 0,
+      fresh_graduate: 0,
+      no_experience: 0
+    }))
+  };
+}
+
+async function syncOfficialListingSource(env, source) {
+  try {
+    const html = await fetchText(source.url);
+    const extracted = source.parser === "moh-current" ? extractMohCurrentJobs(html, source) : { parsed: false, jobs: [] };
+    if (!extracted.parsed) {
+      const message = "Official listing loaded but its expected structure was not found; no jobs were changed.";
+      await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "needs_review" }, source.sourceType || "official_listing");
+      return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+    }
+
+    let added = 0;
+    let updated = 0;
+    const seen = [];
+    for (const job of extracted.jobs) {
+      seen.push(job.external_id);
+      const result = await saveJob(env, source, job);
+      if (result.added) added += 1;
+      if (result.updated) updated += 1;
+    }
+    await archiveMissingJobs(env, source.key, seen);
+    await upsertSource(env, source, { success: true, jobsSeen: extracted.jobs.length, newJobs: added, status: "ok" }, source.sourceType || "official_listing");
+    return { source: source.key, jobsSeen: extracted.jobs.length, added, updated, errors: 0 };
+  } catch (error) {
+    const message = clean(error?.message || error);
+    await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "error" }, source.sourceType || "official_listing");
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+}
+
 async function fetchText(url) {
   const response = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/2.2; +https://mas3a.pages.dev)",
+      "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.1; +https://mas3a.pages.dev)",
       Accept: "text/html,application/xhtml+xml"
     },
-    redirect: "follow"
+    redirect: "follow",
+    signal: AbortSignal.timeout(15000)
   });
 
   if (!response.ok) {
@@ -605,115 +786,29 @@ async function fetchText(url) {
   return response.text();
 }
 
-const TITLE_TRANSLATIONS = new Map([
-  ["Events Coordinator", "منسق فعاليات"],
-  ["Energy Transition Educational Initiatives Lead", "قائد مبادرات التعليم في تحول الطاقة"],
-  ["Senior HPC Systems Administrator", "مسؤول أول أنظمة الحوسبة عالية الأداء (HPC)"],
-  ["Operational Authorities Analyst", "محلل الصلاحيات التشغيلية"],
-  ["Research User Computing Linux Specialist", "أخصائي لينكس لحوسبة المستخدمين البحثية"],
-  ["Business Manager", "مدير أعمال"],
-  ["Technology Support Lead", "قائد دعم التقنية"],
-  ["Digital Audit Operations Analyst", "محلل عمليات التدقيق الرقمي"],
-  ["Technology Internal Auditor", "مدقق داخلي للتقنية"],
-  ["HR Analytics Analyst", "محلل تحليلات الموارد البشرية"],
-  ["Lead Integration Architect", "مهندس معماري أول للتكامل"],
-  ["Software Engineer", "مهندس برمجيات"],
-  ["Research Scientist", "باحث علمي"],
-  ["Security Specialist", "أخصائي أمن"],
-  ["Network Engineer", "مهندس شبكات"]
-]);
-
-function normalizedEnglishTitle(value) {
-  return clean(value)
-    .replace(/\s*[-–—]\s*\d{6,}\s*$/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function professionalTitleArabic(value) {
-  const title = normalizedEnglishTitle(value);
-  return TITLE_TRANSLATIONS.get(title) || null;
-}
-
-function cleanLocalizedText(value, maxLength) {
-  return clean(value)
-    .replace(/^["'«»]+|["'«»]+$/g, "")
-    .replace(/^(?:الترجمة|العربية|النص المترجم)\s*[:：-]\s*/i, "")
-    .slice(0, maxLength) || null;
-}
-
-function usableArabic(value, kind = "text") {
-  const text = clean(value);
-  if (!text || !isArabic(text)) return false;
-  if (/كوكيز|ملفات تعريف الارتباط|تفضيلات الخصوصية|سياسة الكوكيز/i.test(text)) return false;
-  if (kind === "title" && text.length > 120) return false;
-  return true;
-}
-
-async function translateFallback(env, value, maxLength = 900) {
+async function translateToArabic(env, value, maxLength = 900) {
   const text = clean(value).slice(0, maxLength);
   if (!text || isArabic(text) || !env.AI) return text || null;
 
   try {
     const response = await env.AI.run("@cf/meta/m2m100-1.2b", {
       text,
-      source_lang: "en",
-      target_lang: "ar"
+      source_lang: "english",
+      target_lang: "arabic"
     });
 
-    const translated = cleanLocalizedText(
+    const translated = clean(
       response?.translated_text ||
       response?.translation ||
       response?.result?.translated_text ||
       response?.translations?.[0]?.translated_text ||
       response?.translations?.[0]?.text ||
-      "",
-      maxLength
-    );
-
-    return usableArabic(translated) ? translated : text;
-  } catch {
-    return text;
-  }
-}
-
-async function localizeFieldsWithAI(env, job) {
-  if (!env.AI) return null;
-
-  const payload = {
-    title: normalizedEnglishTitle(job.title),
-    summary: clean(removeBoilerplate(job.summary)).slice(0, 650) || null,
-    experience: sanitizeExperience(job.experience),
-    qualification: sanitizeQualification(job.qualification)
-  };
-
-  try {
-    const prompt = `أنت محرر وظائف سعودي. ترجم البيانات الإنجليزية التالية إلى عربية مهنية طبيعية وواضحة فقط. لا تضف أي معلومة غير موجودة. حافظ على الاختصارات التقنية مثل HPC وLinux وAI وGPU كما هي. احذف أي نص خاص بالكوكيز أو التنقل أو أزرار الموقع. أعد JSON فقط بالمفاتيح title وsummary وexperience وqualification، والقيمة null إذا كان الحقل فارغًا.\n\n${JSON.stringify(payload)}`;
-    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
-      prompt,
-      temperature: 0.1,
-      max_tokens: 700
-    });
-
-    const raw = clean(
-      response?.response ||
-      response?.result?.response ||
-      response?.result ||
-      response?.output_text ||
       ""
     );
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      title: cleanLocalizedText(parsed?.title, 180),
-      summary: cleanLocalizedText(parsed?.summary, 650),
-      experience: cleanLocalizedText(parsed?.experience, 300),
-      qualification: cleanLocalizedText(parsed?.qualification, 400)
-    };
+    return translated || text;
   } catch {
-    return null;
+    return text;
   }
 }
 
@@ -721,7 +816,14 @@ async function localizeJob(env, source, job) {
   const companyMap = {
     "King Abdullah University of Science & Technology": "جامعة الملك عبدالله للعلوم والتقنية",
     "King Abdullah University of Science and Technology": "جامعة الملك عبدالله للعلوم والتقنية",
-    "Saudi Telecom Company": "stc"
+    "Saudi Telecom Company": "stc",
+    "Saudia Group": "مجموعة السعودية",
+    "Saudi Aramco": "أرامكو السعودية",
+    "ACWA Power": "أكوا باور",
+    "SPIMACO": "سبيماكو الدوائية",
+    "Saudi Awwal Bank": "البنك السعودي الأول",
+    "Johns Hopkins Aramco Healthcare": "جونز هوبكنز أرامكو للرعاية الصحية",
+    "SIPCHEM": "سبكيم"
   };
 
   const localized = { ...job };
@@ -730,30 +832,17 @@ async function localizeJob(env, source, job) {
 
   if (job.sector === "عسكري") return localized;
 
-  const exactTitle = professionalTitleArabic(job.title);
-  const ai = await localizeFieldsWithAI(env, job);
+  const [title, summary, experience, qualification] = await Promise.all([
+    translateToArabic(env, job.title, 220),
+    translateToArabic(env, job.summary, 700),
+    translateToArabic(env, job.experience, 350),
+    translateToArabic(env, job.qualification, 450)
+  ]);
 
-  localized.title =
-    exactTitle ||
-    (usableArabic(ai?.title, "title") ? ai.title : null) ||
-    await translateFallback(env, normalizedEnglishTitle(job.title), 180) ||
-    job.title;
-
-  localized.summary =
-    (usableArabic(ai?.summary) ? ai.summary : null) ||
-    await translateFallback(env, removeBoilerplate(job.summary), 650) ||
-    job.summary;
-
-  localized.experience =
-    (usableArabic(ai?.experience) ? ai.experience : null) ||
-    await translateFallback(env, sanitizeExperience(job.experience), 300) ||
-    sanitizeExperience(job.experience);
-
-  localized.qualification =
-    (usableArabic(ai?.qualification) ? ai.qualification : null) ||
-    await translateFallback(env, sanitizeQualification(job.qualification), 400) ||
-    sanitizeQualification(job.qualification);
-
+  localized.title = title || job.title;
+  localized.summary = summary || job.summary;
+  localized.experience = experience || job.experience;
+  localized.qualification = qualification || job.qualification;
   return localized;
 }
 
@@ -787,7 +876,7 @@ async function upsertSource(env, source, patch = {}, sourceType = "successfactor
     .bind(
       source.key,
       source.name,
-      source.listingUrls[0],
+      (source.listingUrls?.[0] || source.url),
       sourceType,
       source.sector,
       timestamp,
@@ -1056,6 +1145,55 @@ async function archiveMissingJobs(env, sourceKey, seenExternalIds) {
     .run();
 }
 
+async function reviewMissingMilitaryJobs(env, sourceKey, seenExternalIds) {
+  const timestamp = nowIso();
+  const graceDays = 7;
+  const placeholders = seenExternalIds.length ? seenExternalIds.map(() => "?").join(",") : "";
+  const sql = seenExternalIds.length
+    ? `
+      UPDATE jobs
+      SET status = CASE
+        WHEN expires_at IS NOT NULL AND date(expires_at) < date('now') THEN 'expired'
+        WHEN expires_at IS NULL AND julianday(COALESCE(published_at, discovered_at)) < julianday('now', '-${graceDays} days') THEN 'review'
+        ELSE status
+      END,
+      updated_at = CASE
+        WHEN (expires_at IS NOT NULL AND date(expires_at) < date('now'))
+          OR (expires_at IS NULL AND julianday(COALESCE(published_at, discovered_at)) < julianday('now', '-${graceDays} days'))
+        THEN ? ELSE updated_at END
+      WHERE source_key = ?
+        AND status = 'verified'
+        AND external_id IS NOT NULL
+        AND external_id NOT IN (${placeholders})
+    `
+    : `
+      UPDATE jobs
+      SET status = CASE
+        WHEN expires_at IS NOT NULL AND date(expires_at) < date('now') THEN 'expired'
+        WHEN expires_at IS NULL AND julianday(COALESCE(published_at, discovered_at)) < julianday('now', '-${graceDays} days') THEN 'review'
+        ELSE status
+      END,
+      updated_at = CASE
+        WHEN (expires_at IS NOT NULL AND date(expires_at) < date('now'))
+          OR (expires_at IS NULL AND julianday(COALESCE(published_at, discovered_at)) < julianday('now', '-${graceDays} days'))
+        THEN ? ELSE updated_at END
+      WHERE source_key = ? AND status = 'verified'
+    `;
+  const args = seenExternalIds.length ? [timestamp, sourceKey, ...seenExternalIds] : [timestamp, sourceKey];
+  await env.DB.prepare(sql).bind(...args).run();
+}
+
+async function wasCheckedRecently(env, sourceKey, externalId, hours = 6) {
+  if (!externalId) return false;
+  const row = await env.DB.prepare(
+    `SELECT last_checked_at, status FROM jobs WHERE source_key = ? AND external_id = ? LIMIT 1`
+  ).bind(sourceKey, externalId).first();
+  if (!row?.last_checked_at || row.status !== "verified") return false;
+  const checked = new Date(row.last_checked_at);
+  if (Number.isNaN(checked.getTime())) return false;
+  return Date.now() - checked.getTime() < hours * 3600000;
+}
+
 async function syncSuccessFactorsSource(env, source) {
   const urls = new Set();
   let listingWorked = false;
@@ -1088,14 +1226,25 @@ async function syncSuccessFactorsSource(env, source) {
 
   let added = 0;
   let updated = 0;
+  let skippedFresh = 0;
   let detailErrors = 0;
   const seenExternalIds = [];
+  const allUrls = [...urls];
+  const processedUrls = allUrls.slice(0, 100);
 
-  for (const url of [...urls].slice(0, 100)) {
+  for (const url of processedUrls) {
+    const externalId = externalIdFromUrl(url);
+    if (externalId) seenExternalIds.push(externalId);
     try {
+      // صفحات القوائم تُفحص كل ساعة لاكتشاف الجديد فورًا، بينما تفاصيل الوظيفة
+      // المعروفة يعاد فحصها كل 6 ساعات لتقليل الحمل بدون التضحية باكتشاف الجديد.
+      if (externalId && await wasCheckedRecently(env, source.key, externalId, 6)) {
+        skippedFresh += 1;
+        continue;
+      }
       const html = await fetchText(url);
       const job = extractDetail(html, source, url);
-      if (job.external_id) seenExternalIds.push(job.external_id);
+      if (job.external_id && !seenExternalIds.includes(job.external_id)) seenExternalIds.push(job.external_id);
       const result = await saveJob(env, source, job);
       if (result.added) added += 1;
       if (result.updated) updated += 1;
@@ -1104,7 +1253,8 @@ async function syncSuccessFactorsSource(env, source) {
     }
   }
 
-  if (detailErrors === 0) {
+  // لا نؤرشف وظائف لمجرد أننا وصلنا إلى حد المعالجة في مصدر كبير.
+  if (detailErrors === 0 && processedUrls.length === allUrls.length) {
     await archiveMissingJobs(env, source.key, seenExternalIds);
   }
 
@@ -1116,7 +1266,7 @@ async function syncSuccessFactorsSource(env, source) {
     status: detailErrors > 0 ? "partial" : "ok"
   });
 
-  return { source: source.key, jobsSeen: urls.size, added, updated, errors: detailErrors };
+  return { source: source.key, jobsSeen: urls.size, added, updated, skippedFresh, errors: detailErrors };
 }
 
 async function syncMilitaryNewsSource(env, source) {
@@ -1140,18 +1290,23 @@ async function syncMilitaryNewsSource(env, source) {
     return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
   }
 
+  // صفحة أخبار رسمية ناجحة بلا أي روابط أخبار غالبًا تعني أن بنية الصفحة تغيّرت
+  // أو أن الاستخراج تعطل. لا نغيّر حالات الوظائف الموجودة في هذه الحالة.
+  if (articleUrls.size === 0) {
+    const message = "Official military listing loaded but no announcement URLs were discovered; existing jobs were left unchanged.";
+    await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "needs_review" }, "official_news");
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+
   let added = 0;
   let updated = 0;
   let detailErrors = 0;
   const seenExternalIds = [];
 
-  await env.DB.prepare(
-    `UPDATE jobs SET status = 'expired', updated_at = ? WHERE source_key = ? AND status = 'verified'`
-  )
-    .bind(nowIso(), source.key)
-    .run();
+  const allArticleUrls = [...articleUrls];
+  const processedArticleUrls = allArticleUrls.slice(0, 60);
 
-  for (const url of [...articleUrls].slice(0, 30)) {
+  for (const url of processedArticleUrls) {
     try {
       const html = await fetchText(url);
       const job = extractMilitaryAnnouncement(html, source, url);
@@ -1163,6 +1318,12 @@ async function syncMilitaryNewsSource(env, source) {
     } catch {
       detailErrors += 1;
     }
+  }
+
+  // لا نغلق إعلانًا عسكريًا قبل اكتمال الفحص. إذا اختفى إعلان بدون
+  // موعد ميلادي صريح يتحول إلى review بدل اعتباره منتهيًا بالتخمين.
+  if (detailErrors === 0 && processedArticleUrls.length === allArticleUrls.length) {
+    await reviewMissingMilitaryJobs(env, source.key, seenExternalIds);
   }
 
   await upsertSource(env, source, {
@@ -1182,10 +1343,17 @@ async function syncMilitaryNewsSource(env, source) {
   };
 }
 
+async function expirePastDeadlineJobs(env) {
+  await env.DB.prepare(
+    `UPDATE jobs SET status = 'expired', updated_at = ? WHERE status = 'verified' AND expires_at IS NOT NULL AND date(expires_at) < date('now')`
+  ).bind(nowIso()).run();
+}
+
 async function runSync(env) {
   const startedAt = nowIso();
   await ensureCatalogSources(env);
   await dedupeExistingJobs(env);
+  await expirePastDeadlineJobs(env);
 
   const insert = await env.DB.prepare(
     `
@@ -1205,6 +1373,7 @@ async function runSync(env) {
   let jobsAdded = 0;
   let jobsUpdated = 0;
   let errors = 0;
+  let monitorWarnings = 0;
   const results = [];
 
   for (const source of SUCCESSFACTORS_SOURCES) {
@@ -1214,6 +1383,23 @@ async function runSync(env) {
     jobsAdded += result.added || 0;
     jobsUpdated += result.updated || 0;
     errors += result.errors || 0;
+    results.push(result);
+  }
+
+  for (const source of OFFICIAL_LISTING_SOURCES) {
+    const result = await syncOfficialListingSource(env, source);
+    sourcesChecked += 1;
+    jobsSeen += result.jobsSeen || 0;
+    jobsAdded += result.added || 0;
+    jobsUpdated += result.updated || 0;
+    errors += result.errors || 0;
+    results.push(result);
+  }
+
+  for (const source of PORTAL_MONITOR_SOURCES) {
+    const result = await syncPortalMonitorSource(env, source);
+    sourcesChecked += 1;
+    monitorWarnings += result.errors || 0;
     results.push(result);
   }
 
@@ -1256,6 +1442,7 @@ async function runSync(env) {
     jobs_added: jobsAdded,
     jobs_updated: jobsUpdated,
     errors,
+    monitor_warnings: monitorWarnings,
     results
   };
 }
@@ -1264,7 +1451,7 @@ function corsHeaders(env) {
   return {
     "Access-Control-Allow-Origin": env.CORS_ORIGIN || "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Masaa-Sync-Key",
     "Access-Control-Max-Age": "86400"
   };
 }
@@ -1295,9 +1482,16 @@ async function listJobs(request, env) {
   const noExperience = parseBoolean(url.searchParams.get("no_experience"));
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 100);
   const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
+  const includeExpiredDays = Math.min(Math.max(Number(url.searchParams.get("include_expired_days")) || 0, 0), 90);
 
-  const where = ["status = 'verified'"];
+  const where = [];
   const values = [];
+  if (includeExpiredDays > 0) {
+    where.push(`(status = 'verified' OR (status = 'expired' AND date(COALESCE(expires_at, updated_at)) >= date('now', ?)))`);
+    values.push(`-${includeExpiredDays} days`);
+  } else {
+    where.push("status = 'verified'");
+  }
 
   if (q) {
     where.push(`(title LIKE ? OR company LIKE ? OR summary LIKE ? OR city LIKE ?)`);
@@ -1335,13 +1529,17 @@ async function listJobs(request, env) {
     values.push(noExperience ? 1 : 0);
   }
 
+  const countSql = `SELECT COUNT(*) AS total FROM jobs WHERE ${where.join(" AND ")}`;
+  const countRow = await env.DB.prepare(countSql).bind(...values).first();
+  const total = Number(countRow?.total || 0);
+
   const sql = `
     SELECT
       id, source_key, external_id, title, company, sector,
       city, region, work_mode, qualification, specialization,
       experience, salary, published_at, expires_at, summary,
       source_url, apply_url, remote, fresh_graduate,
-      no_experience, discovered_at, updated_at
+      no_experience, discovered_at, updated_at, status
     FROM jobs
     WHERE ${where.join(" AND ")}
     ORDER BY
@@ -1358,6 +1556,8 @@ async function listJobs(request, env) {
   return {
     ok: true,
     count: result.results?.length || 0,
+    total,
+    has_more: offset + (result.results?.length || 0) < total,
     limit,
     offset,
     jobs: result.results || []
@@ -1390,7 +1590,9 @@ async function stats(env) {
         SUM(CASE WHEN no_experience = 1 THEN 1 ELSE 0 END) AS no_experience,
         SUM(CASE WHEN sector = 'حكومي' THEN 1 ELSE 0 END) AS government,
         SUM(CASE WHEN sector = 'عسكري' THEN 1 ELSE 0 END) AS military,
-        SUM(CASE WHEN sector = 'خاص' THEN 1 ELSE 0 END) AS private
+        SUM(CASE WHEN sector = 'خاص' THEN 1 ELSE 0 END) AS private,
+        SUM(CASE WHEN date(updated_at) = date('now') THEN 1 ELSE 0 END) AS verified_today,
+        COUNT(DISTINCT company) AS active_companies
       FROM jobs
       WHERE status = 'verified'
     `
@@ -1400,8 +1602,10 @@ async function stats(env) {
     `
       SELECT
         SUM(CASE WHEN supported = 1 THEN 1 ELSE 0 END) AS total,
-        SUM(CASE WHEN supported = 1 AND status = 'ok' THEN 1 ELSE 0 END) AS healthy,
-        SUM(CASE WHEN supported = 0 THEN 1 ELSE 0 END) AS portals
+        SUM(CASE WHEN supported = 1 AND source_type <> 'official_portal_monitor' AND status = 'ok' THEN 1 ELSE 0 END) AS healthy,
+        SUM(CASE WHEN source_type = 'official_portal_monitor' THEN 1 ELSE 0 END) AS portals,
+        SUM(CASE WHEN source_type = 'official_portal_monitor' AND status IN ('monitor_only','restricted') THEN 1 ELSE 0 END) AS portals_reachable,
+        SUM(CASE WHEN supported = 1 AND source_type <> 'official_portal_monitor' THEN 1 ELSE 0 END) AS ingestion
       FROM sources
     `
   ).first();
@@ -1411,6 +1615,87 @@ async function stats(env) {
   ).first();
 
   return { ok: true, jobs: jobs || {}, sources: sources || {}, last_sync: lastRun || null };
+}
+
+async function getJobById(id, env) {
+  const job = await env.DB.prepare(
+    `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
+  ).bind(id).first();
+  return job ? { ok: true, job } : { ok: false, error: "Not found" };
+}
+
+async function sitemapJobs(env) {
+  const result = await env.DB.prepare(
+    `SELECT id, updated_at FROM jobs WHERE status = 'verified' ORDER BY COALESCE(updated_at, discovered_at) DESC LIMIT 5000`
+  ).all();
+  return { ok: true, jobs: result.results || [] };
+}
+
+function secureEqual(a, b) {
+  const aa = new TextEncoder().encode(String(a || ""));
+  const bb = new TextEncoder().encode(String(b || ""));
+  if (aa.length !== bb.length || aa.length === 0) return false;
+  let diff = 0;
+  for (let i = 0; i < aa.length; i += 1) diff |= aa[i] ^ bb[i];
+  return diff === 0;
+}
+
+function isSyncAuthorized(request, env) {
+  if (!env.SYNC_SECRET) return false;
+  const auth = request.headers.get("Authorization") || "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const headerKey = request.headers.get("X-Masaa-Sync-Key") || "";
+  return secureEqual(bearer, env.SYNC_SECRET) || secureEqual(headerKey, env.SYNC_SECRET);
+}
+
+function validEmail(value) {
+  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function validHttpsUrl(value) {
+  if (!value) return true;
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
+async function createContactSubmission(request, env) {
+  const configuredOrigin = env.CORS_ORIGIN || "";
+  const origin = request.headers.get("Origin") || "";
+  if (configuredOrigin && configuredOrigin !== "*" && origin !== configuredOrigin) {
+    return { status: 403, body: { ok: false, error: "Origin not allowed" } };
+  }
+
+  let data;
+  try { data = await request.json(); } catch { return { status: 400, body: { ok: false, error: "Invalid JSON" } }; }
+  if (clean(data.website)) return { status: 200, body: { ok: true } }; // honeypot
+
+  const type = clean(data.type).slice(0, 40);
+  const organization = clean(data.organization).slice(0, 160);
+  const jobTitle = clean(data.job_title).slice(0, 200);
+  const sourceUrl = clean(data.source_url).slice(0, 700);
+  const email = clean(data.contact_email).slice(0, 200);
+  const details = clean(data.details).slice(0, 3000);
+  const allowedTypes = new Set(["job", "entity", "correction", "closed", "other"]);
+
+  if (!allowedTypes.has(type) || details.length < 10) {
+    return { status: 400, body: { ok: false, error: "أكمل نوع الطلب والتفاصيل المطلوبة." } };
+  }
+  if (!validEmail(email)) return { status: 400, body: { ok: false, error: "صيغة البريد غير صحيحة." } };
+  if (!validHttpsUrl(sourceUrl)) return { status: 400, body: { ok: false, error: "رابط المصدر يجب أن يكون HTTPS صالحًا." } };
+  if (type === "job" && (!organization || !jobTitle || !sourceUrl)) {
+    return { status: 400, body: { ok: false, error: "إضافة وظيفة تتطلب اسم الجهة والمسمى ورابط المصدر الرسمي." } };
+  }
+
+  const submissionHash = await sha256(`${type}|${organization}|${jobTitle}|${sourceUrl}|${email}|${details}`.toLowerCase());
+  const duplicate = await env.DB.prepare(
+    `SELECT id FROM contact_submissions WHERE submission_hash = ? AND julianday(submitted_at) >= julianday('now', '-10 minutes') LIMIT 1`
+  ).bind(submissionHash).first();
+  if (duplicate) return { status: 200, body: { ok: true, ticket: duplicate.id, duplicate: true } };
+
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO contact_submissions (id, type, organization, job_title, source_url, contact_email, details, submission_hash, submitted_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')`
+  ).bind(id, type, organization || null, jobTitle || null, sourceUrl || null, email || null, details, submissionHash, nowIso()).run();
+  return { status: 201, body: { ok: true, ticket: id } };
 }
 
 async function handleRequest(request, env) {
@@ -1427,12 +1712,38 @@ async function handleRequest(request, env) {
       service: "Masaa Jobs API",
       version: VERSION,
       language: "ar",
-      endpoints: ["GET /health", "GET /jobs", "GET /sources", "GET /stats", "POST /sync"]
+      endpoints: ["GET /health", "GET /jobs", "GET /jobs/:id", "GET /sources", "GET /stats", "GET /sitemap", "POST /contact", "POST /sync (protected)"],
+      ingestion_sources: SUCCESSFACTORS_SOURCES.length + OFFICIAL_LISTING_SOURCES.length + MILITARY_NEWS_SOURCES.length,
+      monitored_portals: PORTAL_MONITOR_SOURCES.length
     }, env);
   }
 
   if (request.method === "GET" && path === "/health") {
     return json({ ok: true, service: "Masaa Jobs API", version: VERSION, time: nowIso() }, env);
+  }
+
+  if (request.method === "GET" && path.startsWith("/jobs/") && path.length > 6) {
+    try {
+      const id = decodeURIComponent(path.slice(6));
+      const result = await getJobById(id, env);
+      return json(result, env, result.ok ? 200 : 404);
+    } catch (error) {
+      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+    }
+  }
+
+  if (request.method === "GET" && path === "/sitemap") {
+    try { return json(await sitemapJobs(env), env); }
+    catch (error) { return json({ ok: false, error: clean(error?.message || error) }, env, 500); }
+  }
+
+  if (request.method === "POST" && path === "/contact") {
+    try {
+      const result = await createContactSubmission(request, env);
+      return json(result.body, env, result.status);
+    } catch (error) {
+      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+    }
   }
 
   if (request.method === "GET" && path === "/jobs") {
@@ -1460,6 +1771,8 @@ async function handleRequest(request, env) {
   }
 
   if (request.method === "POST" && path === "/sync") {
+    if (!env.SYNC_SECRET) return json({ ok: false, error: "SYNC_SECRET is not configured" }, env, 503);
+    if (!isSyncAuthorized(request, env)) return json({ ok: false, error: "Unauthorized" }, env, 401);
     try {
       const result = await runSync(env);
       return json(result, env, result.ok ? 200 : 207);
