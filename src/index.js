@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.20.0-telegram-publishing-alerts";
+const VERSION = "3.21.0-structured-field-cleanup";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -1117,6 +1117,123 @@ function arabicPublicText(value, fallback = null, maxLength = 900) {
   return fallback;
 }
 
+
+function dedupeRepeatedFieldText(value) {
+  const text = clean(value);
+  if (!text) return null;
+
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length >= 4) {
+    const maxSize = Math.min(12, Math.floor(words.length / 2));
+    for (let size = 1; size <= maxSize; size += 1) {
+      const first = words.slice(0, size);
+      let matched = 0;
+      while (matched + size <= words.length) {
+        let same = true;
+        for (let i = 0; i < size; i += 1) {
+          if (words[matched + i] !== first[i]) {
+            same = false;
+            break;
+          }
+        }
+        if (!same) break;
+        matched += size;
+      }
+      if (matched >= size * 2 && matched >= Math.floor(words.length * 0.7)) {
+        return first.join(" ");
+      }
+    }
+  }
+
+  const segments = text
+    .split(/(?<=[.!؟؛])\s+|\s*[|•]\s*/u)
+    .map((part) => clean(part))
+    .filter(Boolean);
+
+  if (segments.length > 1) {
+    const seen = new Set();
+    const unique = [];
+    for (const segment of segments) {
+      const key = segment
+        .replace(/[ـًٌٍَُِّْ]/g, "")
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(segment);
+    }
+    return clean(unique.join(" "));
+  }
+
+  return text;
+}
+
+function sanitizeQualificationField(value) {
+  let text = dedupeRepeatedFieldText(value);
+  if (!text || containsCookieNoise(text)) return null;
+
+  text = clean(text)
+    .replace(/(?:\s+(?:المؤهل|المؤهلات|التعليم|Education|Qualifications?)\s*:?\s*){2,}/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const repeatedDegree = text.match(
+    /^(شهادة\s+(?:الدبلوم|البكالوريوس|الماجستير|الدكتوراه))(?:\s+\1){1,}$/u
+  );
+  if (repeatedDegree) text = repeatedDegree[1];
+
+  if (text.length > 260) {
+    const firstSentence = text.match(/^.{20,260}?[.!؟](?:\s|$)/u)?.[0];
+    text = clean(firstSentence || text.slice(0, 260));
+  }
+
+  return text || null;
+}
+
+function sanitizeExperienceField(value) {
+  let text = dedupeRepeatedFieldText(value);
+  if (!text || containsCookieNoise(text)) return null;
+
+  const contaminationMarkers = [
+    "يرجى ملاحظة",
+    "ملاحظة أن",
+    "هذه وصفة عمل",
+    "هذه الوصفة الوظيفية",
+    "الوصف الوظيفي ليس",
+    "المهارات الوظيفية",
+    "المهارات الأساسية",
+    "المعرفة الصحية",
+    "إجراءات توثيق",
+    "لغة عربية",
+    "اللغة الإنجليزية",
+    "Please note",
+    "This job description is not designed",
+    "Core competencies",
+    "Job skills"
+  ];
+
+  let cut = text.length;
+  const lower = text.toLowerCase();
+  for (const marker of contaminationMarkers) {
+    const idx = lower.indexOf(marker.toLowerCase());
+    if (idx > 0 && idx < cut) cut = idx;
+  }
+  text = clean(text.slice(0, cut));
+
+  const yearsSentence = text.match(
+    /(?:^|[.!؟]\s*)([^.!؟]{0,80}?\b\d+\s*(?:-|–|—|إلى|الى)\s*\d+\s*سنوات?[^.!؟]{0,180}[.!؟]?)/u
+  );
+  if (yearsSentence?.[1]) text = clean(yearsSentence[1]);
+
+  if (text.length > 320) {
+    const firstSentence = text.match(/^.{25,320}?[.!؟](?:\s|$)/u)?.[0];
+    text = clean(firstSentence || text.slice(0, 320));
+  }
+
+  if (/(?:هذه وصفة عمل|يرجى ملاحظة|this job description is not designed)/i.test(text)) return null;
+  return text || null;
+}
+
 function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
   const source = String(text ?? "");
   const lower = source.toLowerCase();
@@ -1277,9 +1394,9 @@ function extractDetail(html, source, url) {
     city,
     region: null,
     work_mode: remote ? "عن بُعد" : null,
-    qualification: containsCookieNoise(qualification) ? null : (clean(qualification) || null),
+    qualification: sanitizeQualificationField(qualification),
     specialization: null,
-    experience: containsCookieNoise(experience) ? null : (clean(experience) || null),
+    experience: sanitizeExperienceField(experience),
     salary: null,
     published_at: parseDate(published),
     expires_at: null,
@@ -3731,9 +3848,9 @@ function publicArabicJob(row) {
     city,
     region: arabicPublicText(row.region, null, 120),
     work_mode: normalizeWorkMode(row.work_mode, Boolean(row.remote)),
-    qualification: containsCookieNoise(row.qualification) ? null : arabicPublicText(row.qualification, null, 450),
+    qualification: arabicPublicText(sanitizeQualificationField(row.qualification), null, 260),
     specialization: arabicPublicText(row.specialization, null, 180),
-    experience: containsCookieNoise(row.experience) ? null : arabicPublicText(row.experience, null, 350),
+    experience: arabicPublicText(sanitizeExperienceField(row.experience), null, 320),
     summary: arabicPublicText(
       containsCookieNoise(row.summary) ? null : row.summary,
       "فرصة وظيفية لدى " + company + ". راجع رابط التقديم للاطلاع على التفاصيل والمتطلبات.",
