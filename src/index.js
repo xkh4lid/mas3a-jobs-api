@@ -31,10 +31,10 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.saudia.com",
     listingUrls: [
-      "https://careers.saudia.com/viewalljobs/?locale=ar_SA"
+      "https://careers.saudia.com/search/?q=&locationsearch=SA"
     ],
     searchUrls: [
-      "https://careers.saudia.com/search/?q=&locationsearch="
+      "https://careers.saudia.com/search/?q=&locationsearch=SA"
     ]
   },
   {
@@ -73,7 +73,7 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.spimaco.com.sa",
     listingUrls: [
-      "https://careers.spimaco.com.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.spimaco.com.sa/search/?q=&locationsearch="
     ],
     searchUrls: [
       "https://careers.spimaco.com.sa/search/?q=&locationsearch="
@@ -87,7 +87,7 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.sab.com",
     listingUrls: [
-      "https://careers.sab.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.sab.com/search/?q=&locationsearch="
     ],
     searchUrls: [
       "https://careers.sab.com/search/?q=&locationsearch="
@@ -101,7 +101,7 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.jhah.com",
     listingUrls: [
-      "https://careers.jhah.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.jhah.com/search/?q=&locationsearch="
     ],
     searchUrls: [
       "https://careers.jhah.com/search/?q=&locationsearch="
@@ -126,7 +126,7 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "jobs.alfanar.com",
     listingUrls: [
-      "https://jobs.alfanar.com/alfanar/go/All-Openings/4442101/?location=SAUDI&q=&sortColumn=referencedate&sortDirection=desc"
+      "https://jobs.alfanar.com/alfanar/search/?q=&locationsearch=SAUDI"
     ],
     searchUrls: [
       "https://jobs.alfanar.com/alfanar/search/?q=&locationsearch=SAUDI"
@@ -237,7 +237,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.5.2";
+const VERSION = "3.5.3";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
