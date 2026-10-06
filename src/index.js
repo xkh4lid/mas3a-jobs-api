@@ -417,8 +417,8 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.15.2";
-const LOCALIZATION_VERSION = "ar-v6";
+const VERSION = "3.15.3";
+const LOCALIZATION_VERSION = "ar-v7-title";
 const nowIso = () => new Date().toISOString();
 
 const clean = (value) =>
@@ -1960,6 +1960,52 @@ async function translateToArabic(env, value, maxLength = 900) {
   }
 }
 
+async function translateJobTitleToArabic(env, source, job) {
+  const rawTitle = removeBoilerplate(job?.title || titleFromJobUrl(job?.apply_url || job?.source_url)).slice(0, 220);
+  if (!rawTitle) return null;
+  if (!hasLatinWords(rawTitle) && isArabic(rawTitle)) return rawTitle;
+
+  if (env.AI) {
+    try {
+      const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+        messages: [
+          {
+            role: "system",
+            content: "أنت مترجم مسميات وظيفية محترف. ترجم المسمى الوظيفي فقط إلى عربية مهنية طبيعية ومختصرة. لا تضف شرحًا أو اسم الجهة أو المدينة. لا تترجم Facility إلى مستشفى إلا إذا كان السياق طبيًا فعلًا. حوّل الاختصارات التقنية إلى معنى عربي واضح أو اكتبها بحروف عربية عند الحاجة. لا تخترع معلومات. أخرج المسمى فقط في سطر واحد وبدون علامات اقتباس."
+          },
+          {
+            role: "user",
+            content: "المسمى: " + rawTitle + "\nالجهة: " + clean(source?.companyAr || source?.company || "")
+          }
+        ],
+        max_tokens: 80,
+        temperature: 0.1
+      });
+
+      const generated = clean(
+        response?.response ||
+        response?.result?.response ||
+        response?.output_text ||
+        response?.result?.output_text ||
+        response?.choices?.[0]?.message?.content ||
+        ""
+      )
+        .replace(/^["'«»]+|["'«»]+$/g, "")
+        .replace(/^(?:المسمى(?:\s+الوظيفي)?|الترجمة)\s*[:：-]\s*/i, "")
+        .split(/\r?\n/)[0]
+        .slice(0, 220);
+
+      if (generated && isArabic(generated) && !/^فرصة وظيفية لدى\b/.test(generated)) {
+        return generated;
+      }
+    } catch {
+      // Fall back to the translation model below.
+    }
+  }
+
+  return translateToArabic(env, rawTitle, 220);
+}
+
 async function localizeJob(env, source, job) {
   const companyMap = {
     "King Abdullah University of Science & Technology": "جامعة الملك عبدالله للعلوم والتقنية",
@@ -1981,7 +2027,7 @@ async function localizeJob(env, source, job) {
   if (job.sector === "عسكري") return localized;
 
   const [title, summary, experience, qualification] = await Promise.all([
-    translateToArabic(env, job.title, 220),
+    translateJobTitleToArabic(env, source, job),
     translateToArabic(env, job.summary, 700),
     translateToArabic(env, job.experience, 350),
     translateToArabic(env, job.qualification, 450)
