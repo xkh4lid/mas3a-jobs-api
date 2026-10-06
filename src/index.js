@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.16.2-security";
+const VERSION = "3.17.0-security";
 const LOCALIZATION_VERSION = "ar-v7-title";
 const nowIso = () => new Date().toISOString();
 
@@ -1913,40 +1913,135 @@ async function syncOfficialListingSource(env, source) {
 
 const FETCH_TIMEOUTS_MS = [12000, 18000, 24000];
 const RETRYABLE_HTTP = new Set([408, 425, 429, 500, 502, 503, 504]);
+const REDIRECT_HTTP = new Set([301, 302, 303, 307, 308]);
+const MAX_FETCH_BODY_BYTES = 4 * 1024 * 1024;
+const MAX_FETCH_REDIRECTS = 5;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isBlockedOutboundHost(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (!host) return true;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+
+  // Block literal IPv6 addresses entirely; external sources should use DNS hostnames.
+  if (host.includes(":")) return true;
+
+  const match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!match) return false;
+
+  const octets = match.slice(1).map(Number);
+  if (octets.some((value) => value < 0 || value > 255)) return true;
+  const [a, b] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    a >= 224
+  );
+}
+
+function safeOutboundHttpsUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+    if (parsed.port && parsed.port !== "443") return null;
+    if (isBlockedOutboundHost(parsed.hostname)) return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+async function readResponseTextLimited(response, maxBytes = MAX_FETCH_BODY_BYTES) {
+  const declaredLength = Number(response.headers.get("Content-Length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error("Remote response too large");
+  }
+
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error("Remote response too large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch {}
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
 
 async function fetchPage(url, options = {}) {
   const attempts = Math.max(1, Math.min(Number(options.attempts) || 3, 3));
   const accept = options.accept || "text/html,application/xhtml+xml";
+  const initialUrl = safeOutboundHttpsUrl(url);
+  if (!initialUrl) throw new Error("Blocked unsafe outbound URL");
+
   let lastError = null;
   let lastResult = null;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const timeout = FETCH_TIMEOUTS_MS[Math.min(attempt, FETCH_TIMEOUTS_MS.length - 1)];
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2; +https://mas3a.pages.dev)",
-          Accept: accept,
-          "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.8"
-        },
-        redirect: "follow",
-        signal: AbortSignal.timeout(timeout)
-      });
+      let currentUrl = initialUrl;
+      let response = null;
 
-      const text = await response.text();
+      for (let redirects = 0; redirects <= MAX_FETCH_REDIRECTS; redirects += 1) {
+        response = await fetch(currentUrl, {
+          method: "GET",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2; +https://mas3a.pages.dev)",
+            Accept: accept,
+            "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.8"
+          },
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeout)
+        });
+
+        if (!REDIRECT_HTTP.has(response.status)) break;
+        const location = response.headers.get("Location");
+        if (!location) break;
+        const nextUrl = safeOutboundHttpsUrl(new URL(location, currentUrl).href);
+        if (!nextUrl) throw new Error("Blocked unsafe redirect");
+        currentUrl = nextUrl;
+
+        if (redirects === MAX_FETCH_REDIRECTS) {
+          throw new Error("Too many redirects");
+        }
+      }
+
+      const text = await readResponseTextLimited(response);
       const result = {
         ok: response.ok,
         status: response.status,
-        url: response.url || url,
+        url: safeOutboundHttpsUrl(response.url || currentUrl) || currentUrl,
         text
       };
 
       if (response.ok || !RETRYABLE_HTTP.has(response.status)) return result;
       lastResult = result;
-      lastError = new Error(`HTTP ${response.status} for ${url}`);
+      lastError = new Error(`HTTP ${response.status} for ${initialUrl}`);
     } catch (error) {
       lastError = error;
     }
@@ -1957,7 +2052,7 @@ async function fetchPage(url, options = {}) {
   }
 
   if (lastResult) return lastResult;
-  throw lastError || new Error(`Could not fetch ${url}`);
+  throw lastError || new Error(`Could not fetch ${initialUrl}`);
 }
 
 async function fetchText(url, options = {}) {
@@ -3422,7 +3517,7 @@ function corsHeaders(env) {
   const configuredOrigin = clean(env.CORS_ORIGIN || "");
   const headers = {
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Masaa-Sync-Key",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin"
   };
@@ -3803,7 +3898,15 @@ function validEmail(value) {
 
 function validHttpsUrl(value) {
   if (!value) return true;
-  try { return new URL(value).protocol === "https:"; } catch { return false; }
+  return Boolean(safeOutboundHttpsUrl(value));
+}
+
+function cleanPublicInput(value, maxLength) {
+  return clean(
+    String(value ?? "")
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+      .replace(/[\u202A-\u202E\u2066-\u2069]/g, "")
+  ).slice(0, maxLength);
 }
 
 async function verifyTurnstile(request, env, token) {
@@ -3873,12 +3976,12 @@ async function createContactSubmission(request, env) {
     return { status: 403, body: { ok: false, error: "تعذر التحقق البشري. أعد المحاولة." } };
   }
 
-  const type = clean(data.type).slice(0, 40);
-  const organization = clean(data.organization).slice(0, 160);
-  const jobTitle = clean(data.job_title).slice(0, 200);
-  const sourceUrl = clean(data.source_url).slice(0, 700);
-  const email = clean(data.contact_email).slice(0, 200);
-  const details = clean(data.details).slice(0, 3000);
+  const type = cleanPublicInput(data.type, 40);
+  const organization = cleanPublicInput(data.organization, 160);
+  const jobTitle = cleanPublicInput(data.job_title, 200);
+  const sourceUrl = cleanPublicInput(data.source_url, 700);
+  const email = cleanPublicInput(data.contact_email, 200);
+  const details = cleanPublicInput(data.details, 3000);
   const allowedTypes = new Set(["job", "entity", "correction", "closed", "other"]);
 
   if (!allowedTypes.has(type) || details.length < 10) {
@@ -3922,7 +4025,9 @@ async function handleRequest(request, env) {
 
   const isPublicApiRead =
     request.method === "GET" &&
-    (path === "/jobs" ||
+    (path === "/" ||
+      path === "/health" ||
+      path === "/jobs" ||
       path.startsWith("/jobs/") ||
       path === "/sources" ||
       path === "/stats" ||
