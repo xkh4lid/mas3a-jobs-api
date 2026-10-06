@@ -197,7 +197,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.2.0";
+const VERSION = "3.2.1";
 const LOCALIZATION_VERSION = "ar-v3";
 const nowIso = () => new Date().toISOString();
 
@@ -372,6 +372,28 @@ function discoverJobUrls(html, source, baseUrl) {
 
   while ((match = rawJobRegex.exec(normalized))) {
     add(match[1]);
+  }
+
+  return [...found];
+}
+
+function discoverCategoryUrls(html, source, baseUrl) {
+  const normalized = normalizeListingHtml(html);
+  const found = new Set();
+  const hrefRegex = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  let match;
+
+  while ((match = hrefRegex.exec(normalized))) {
+    const url = absoluteUrl(match[1], baseUrl);
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname !== source.host) continue;
+      if (!/\/go\//i.test(parsed.pathname)) continue;
+      if (!/\/\d{4,}\/?$/i.test(parsed.pathname)) continue;
+      found.add(parsed.href);
+    } catch {
+      // Ignore malformed URLs.
+    }
   }
 
   return [...found];
@@ -694,7 +716,7 @@ async function syncPortalMonitorSource(env, source) {
     const response = await fetch(source.url, {
       method: "GET",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2; +https://mas3a.pages.dev)",
+        "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2.1; +https://mas3a.pages.dev)",
         Accept: "text/html,application/xhtml+xml"
       },
       redirect: "follow",
@@ -800,21 +822,28 @@ async function syncOfficialListingSource(env, source) {
   }
 }
 
-async function fetchText(url) {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2; +https://mas3a.pages.dev)",
-      Accept: "text/html,application/xhtml+xml"
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(15000)
-  });
+async function fetchText(url, { timeoutMs = 18000, attempts = 2 } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2.1; +https://mas3a.pages.dev)",
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.8,ar;q=0.6"
+        },
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs)
+      });
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} for ${url}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+      return await response.text();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
   }
-
-  return response.text();
+  throw lastError || new Error(`Could not fetch ${url}`);
 }
 
 async function translateToArabic(env, value, maxLength = 900) {
@@ -1236,6 +1265,7 @@ async function wasCheckedRecently(env, sourceKey, externalId, hours = 6) {
 
 async function syncSuccessFactorsSource(env, source) {
   const urls = new Set();
+  const categoryUrls = new Set();
   let listingWorked = false;
   let explicitNoJobs = false;
   const errors = [];
@@ -1247,8 +1277,23 @@ async function syncSuccessFactorsSource(env, source) {
 
       if (pageExplicitlyHasNoJobs(html)) explicitNoJobs = true;
       for (const url of discoverJobUrls(html, source, listingUrl)) urls.add(url);
+      for (const url of discoverCategoryUrls(html, source, listingUrl)) categoryUrls.add(url);
     } catch (error) {
       errors.push(clean(error?.message || error));
+    }
+  }
+
+  // Some SuccessFactors tenants render job rows only on category pages. Crawl a
+  // bounded set of official /go/ pages before declaring the connector broken.
+  if (listingWorked && urls.size === 0 && categoryUrls.size > 0) {
+    for (const categoryUrl of [...categoryUrls].slice(0, 30)) {
+      try {
+        const html = await fetchText(categoryUrl);
+        if (pageExplicitlyHasNoJobs(html)) explicitNoJobs = true;
+        for (const url of discoverJobUrls(html, source, categoryUrl)) urls.add(url);
+      } catch (error) {
+        errors.push(clean(error?.message || error));
+      }
     }
   }
 
@@ -1834,4 +1879,4 @@ export default {
   }
 };
 
-export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId };
+export { discoverJobUrls, discoverCategoryUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId };
