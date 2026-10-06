@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.15.3";
+const VERSION = "3.16.0-security";
 const LOCALIZATION_VERSION = "ar-v7-title";
 const nowIso = () => new Date().toISOString();
 
@@ -843,24 +843,66 @@ function configuredSourceHosts(source) {
 function isTrustedDiscoveryApplyUrl(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:") return false;
-    const host = url.hostname.toLowerCase();
-    const blocked = [
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+
+    const host = url.hostname.toLowerCase().replace(/\.$/, "");
+    if (!host || host.startsWith("xn--") || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return false;
+
+    const discoveryHosts = new Set([
       "ewdifh.com", "www.ewdifh.com",
       "wadhefa.com", "www.wadhefa.com",
       "wdeftksa.com", "www.wdeftksa.com",
-      "isaudinews.com", "www.isaudinews.com",
-      "facebook.com", "www.facebook.com",
-      "instagram.com", "www.instagram.com",
-      "twitter.com", "www.twitter.com", "x.com", "www.x.com",
-      "t.me", "telegram.me", "www.telegram.me",
-      "whatsapp.com", "www.whatsapp.com", "api.whatsapp.com",
-      "apps.apple.com", "play.google.com",
-      "tiktok.com", "www.tiktok.com",
-      "googleadservices.com", "doubleclick.net",
-      "bit.ly", "tinyurl.com"
+      "isaudinews.com", "www.isaudinews.com"
+    ]);
+    if (discoveryHosts.has(host)) return false;
+
+    const officialHosts = new Set();
+    for (const source of SUCCESSFACTORS_SOURCES) {
+      if (source.host) officialHosts.add(String(source.host).toLowerCase());
+      for (const applyHost of source.applyHosts || []) officialHosts.add(String(applyHost).toLowerCase());
+    }
+    for (const source of MILITARY_NEWS_SOURCES) {
+      if (source.host) officialHosts.add(String(source.host).toLowerCase());
+      for (const applyHost of source.applyHosts || []) officialHosts.add(String(applyHost).toLowerCase());
+    }
+    for (const source of OFFICIAL_LISTING_SOURCES) {
+      for (const candidate of [source.url, ...(source.listingUrls || [])]) {
+        try { officialHosts.add(new URL(candidate).hostname.toLowerCase()); } catch {}
+      }
+    }
+    for (const source of PORTAL_MONITOR_SOURCES) {
+      try { officialHosts.add(new URL(source.url).hostname.toLowerCase()); } catch {}
+    }
+
+    const knownRecruitingRoots = [
+      "linkedin.com",
+      "myworkdayjobs.com",
+      "workday.com",
+      "successfactors.com",
+      "oraclecloud.com",
+      "taleo.net",
+      "smartrecruiters.com",
+      "greenhouse.io",
+      "lever.co",
+      "icims.com",
+      "workable.com",
+      "bamboohr.com",
+      "recruitee.com",
+      "personio.com",
+      "personio.de"
     ];
-    return !blocked.some((blockedHost) => host === blockedHost || host.endsWith("." + blockedHost));
+
+    const matchesHost = (candidate) =>
+      host === candidate || host.endsWith("." + candidate);
+
+    if ([...officialHosts].some(matchesHost)) return true;
+    if (knownRecruitingRoots.some(matchesHost)) return true;
+
+    // Saudi government, university and medical recruitment domains are allowed.
+    if (host.endsWith(".gov.sa") || host.endsWith(".edu.sa") || host.endsWith(".med.sa")) return true;
+    if (host === "jobs.sa" || host.endsWith(".jobs.sa") || host === "jadarat.sa" || host.endsWith(".jadarat.sa")) return true;
+
+    return false;
   } catch {
     return false;
   }
@@ -1409,7 +1451,7 @@ function ewdifhApplyUrl(html, baseUrl) {
       if (isTrustedDiscoveryApplyUrl(url)) return url;
     }
   }
-  return null;
+  return baseUrl;
 }
 
 function extractEwdifhJob(html, articleUrl) {
@@ -3364,8 +3406,13 @@ function securityHeaders() {
   return {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "0",
     "Referrer-Policy": "no-referrer",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), browsing-topics=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Origin-Agent-Cluster": "?1",
+    "X-Permitted-Cross-Domain-Policies": "none",
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
   };
@@ -3415,15 +3462,15 @@ function requestRateKey(request, scope) {
   return ip ? `${scope}:${ip}` : null;
 }
 
-async function rateLimitAllowed(binding, key) {
-  if (!binding || !key) return true;
+async function rateLimitAllowed(binding, key, options = {}) {
+  const failClosed = options.failClosed === true;
+  if (!binding || !key) return !failClosed;
   try {
     const result = await binding.limit({ key });
     return result?.success !== false;
   } catch (error) {
-    // Fail open to avoid an availability outage if the rate limiter itself has an incident.
     console.error("mas3a_rate_limit_error", clean(error?.message || error));
-    return true;
+    return !failClosed;
   }
 }
 
@@ -3641,71 +3688,35 @@ async function listSources(env) {
   await ensureCatalogSources(env);
   const result = await env.DB.prepare(
     `
-      SELECT
-        source_key, name, url, source_type, sector,
-        enabled, supported, last_checked_at, last_success_at,
-        jobs_seen, new_jobs, error_count, last_error, status
+      SELECT name, source_type, sector, jobs_seen
       FROM sources
-      ORDER BY supported DESC, sector ASC, name ASC
+      WHERE enabled = 1
+        AND supported = 1
+        AND status = 'ok'
+      ORDER BY sector ASC, name ASC
     `
   ).all();
-
-  const publicStatus = (status) => {
-    if (status === "ok") {
-      return { status: "ok", label: "يعمل بشكل طبيعي" };
-    }
-
-    if (status === "pending") {
-      return { status: "pending", label: "بانتظار أول فحص" };
-    }
-
-    if (status === "monitor_only" || status === "restricted" || status === "error") {
-      return { status: "monitor_only", label: "متابعة رسمية" };
-    }
-
-    if (status === "needs_review" || status === "partial") {
-      return { status: "pending", label: "تحت التحقق" };
-    }
-
-    return { status: "monitor_only", label: "متابعة رسمية" };
-  };
 
   const typeLabels = {
     successfactors: "بوابة توظيف رسمية",
     official_news: "إعلانات رسمية",
-    official_portal_monitor: "بوابة رسمية تحت المراقبة",
     official_listing: "قائمة وظائف رسمية",
     discovery_feed: "مصدر اكتشاف للوظائف"
   };
 
   return {
     ok: true,
-    sources: (result.results || []).map((source) => {
-      const publicState = publicStatus(source.status);
-
-      return {
-        source_key: source.source_key,
-        name: arabicPublicText(source.name, "مصدر رسمي", 180),
-        url: source.url,
-        source_type: source.source_type,
-        sector: source.sector,
-        enabled: source.enabled,
-        supported: source.supported,
-        last_checked_at: source.last_checked_at,
-        last_success_at: source.last_success_at,
-        jobs_seen: source.jobs_seen,
-        new_jobs: source.new_jobs,
-        error_count: 0,
-        last_error: null,
-        status: publicState.status,
-        status_label: publicState.label,
-        source_type_label: typeLabels[source.source_type] || "مصدر رسمي",
-        last_error_ar: null
-      };
-    })
+    sources: (result.results || []).map((source) => ({
+      name: arabicPublicText(source.name, "مصدر وظائف", 180),
+      sector: source.sector,
+      jobs_seen: Number(source.jobs_seen || 0),
+      supported: 1,
+      status: "ok",
+      status_label: "يعمل بشكل طبيعي",
+      source_type_label: typeLabels[source.source_type] || "مصدر وظائف"
+    }))
   };
 }
-
 async function stats(env) {
   const jobs = await env.DB.prepare(
     `
@@ -3717,8 +3728,7 @@ async function stats(env) {
         SUM(CASE WHEN sector = 'حكومي' THEN 1 ELSE 0 END) AS government,
         SUM(CASE WHEN sector = 'عسكري' THEN 1 ELSE 0 END) AS military,
         SUM(CASE WHEN sector = 'خاص' THEN 1 ELSE 0 END) AS private,
-        SUM(CASE WHEN status = 'verified' AND date(updated_at) = date('now') THEN 1 ELSE 0 END) AS verified_today,
-        SUM(CASE WHEN status = 'discovered' THEN 1 ELSE 0 END) AS discovered,
+        SUM(CASE WHEN date(updated_at) = date('now') THEN 1 ELSE 0 END) AS verified_today,
         COUNT(DISTINCT company) AS active_companies
       FROM jobs
       WHERE status = 'verified'
@@ -3732,25 +3742,8 @@ async function stats(env) {
     `
   ).first();
 
-  const sources = await env.DB.prepare(
-    `
-      SELECT
-        SUM(CASE WHEN supported = 1 THEN 1 ELSE 0 END) AS total,
-        SUM(CASE WHEN supported = 1 AND source_type <> 'official_portal_monitor' AND status = 'ok' THEN 1 ELSE 0 END) AS healthy,
-        SUM(CASE WHEN source_type = 'official_portal_monitor' THEN 1 ELSE 0 END) AS portals,
-        SUM(CASE WHEN source_type = 'official_portal_monitor' AND status IN ('monitor_only','restricted') THEN 1 ELSE 0 END) AS portals_reachable,
-        SUM(CASE WHEN supported = 1 AND source_type <> 'official_portal_monitor' THEN 1 ELSE 0 END) AS ingestion
-      FROM sources
-    `
-  ).first();
-
-  const lastRun = await env.DB.prepare(
-    `SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1`
-  ).first();
-
-  return { ok: true, jobs: jobs || {}, sources: sources || {}, last_sync: lastRun || null };
+  return { ok: true, jobs: jobs || {} };
 }
-
 async function getJobById(id, env) {
   const job = await env.DB.prepare(
     `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
@@ -3811,7 +3804,7 @@ function validHttpsUrl(value) {
 }
 
 async function verifyTurnstile(request, env, token) {
-  if (!env.TURNSTILE_SECRET_KEY) return { ok: true, skipped: true };
+  if (!env.TURNSTILE_SECRET_KEY) return { ok: false, reason: "not_configured" };
   if (!token) return { ok: false, reason: "missing_token" };
 
   const body = new FormData();
@@ -3861,7 +3854,10 @@ async function createContactSubmission(request, env) {
   const turnstileToken = clean(data.turnstile_token || data["cf-turnstile-response"]);
   const turnstile = await verifyTurnstile(request, env, turnstileToken);
   if (!turnstile.ok) {
-    return { status: 403, body: { ok: false, error: "Human verification failed" } };
+    if (turnstile.reason === "not_configured") {
+      return { status: 503, body: { ok: false, error: "خدمة التحقق البشري غير مهيأة مؤقتًا." } };
+    }
+    return { status: 403, body: { ok: false, error: "تعذر التحقق البشري. أعد المحاولة." } };
   }
 
   const type = clean(data.type).slice(0, 40);
@@ -3916,7 +3912,8 @@ async function handleRequest(request, env) {
     (path === "/jobs" ||
       path.startsWith("/jobs/") ||
       path === "/sources" ||
-      path === "/stats");
+      path === "/stats" ||
+      path === "/sitemap");
 
   if (isPublicApiRead) {
     const allowed = await rateLimitAllowed(
@@ -3936,7 +3933,8 @@ async function handleRequest(request, env) {
   if (request.method === "POST" && (path === "/contact" || path === "/sync")) {
     const allowed = await rateLimitAllowed(
       env.WRITE_RATE_LIMITER,
-      requestRateKey(request, path === "/contact" ? "contact" : "sync")
+      requestRateKey(request, path === "/contact" ? "contact" : "sync"),
+      { failClosed: true }
     );
     if (!allowed) {
       return json(
@@ -3967,8 +3965,11 @@ async function handleRequest(request, env) {
   }
 
   if (request.method === "GET" && path === "/sitemap") {
-    try { return json(await sitemapJobs(env), env); }
-    catch (error) { return internalError(error, env); }
+    try {
+      return json(await sitemapJobs(env), env, 200, {
+        "Cache-Control": "public, max-age=300, s-maxage=600"
+      });
+    } catch (error) { return internalError(error, env); }
   }
 
   if (request.method === "POST" && path === "/contact") {
@@ -3990,7 +3991,9 @@ async function handleRequest(request, env) {
 
   if (request.method === "GET" && path === "/sources") {
     try {
-      return json(await listSources(env), env);
+      return json(await listSources(env), env, 200, {
+        "Cache-Control": "public, max-age=60, s-maxage=120"
+      });
     } catch (error) {
       return internalError(error, env);
     }
@@ -3998,7 +4001,9 @@ async function handleRequest(request, env) {
 
   if (request.method === "GET" && path === "/stats") {
     try {
-      return json(await stats(env), env);
+      return json(await stats(env), env, 200, {
+        "Cache-Control": "public, max-age=60, s-maxage=120"
+      });
     } catch (error) {
       return internalError(error, env);
     }
