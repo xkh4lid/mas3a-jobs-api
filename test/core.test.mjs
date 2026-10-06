@@ -173,6 +173,10 @@ test("renders a safe dynamic Telegram SVG job card", () => {
   assert.match(svg, /شركة &amp; موثوقة/);
   assert.doesNotMatch(svg, /<اختبار>/);
   assert.match(svg, /التقديم من المصدر الرسمي/);
+  assert.match(svg, /متحقق من المصدر الرسمي/);
+  assert.match(svg, /fill="#0F6B4F"/);
+  assert.match(svg, /fill="#F6B744"/);
+  assert.match(svg, /translate\(816\.00,28\.00\)/);
 });
 
 
@@ -190,4 +194,18 @@ test("embeds a safe company mark in the Telegram SVG when provided", () => {
   assert.match(svg, /<image /);
   assert.match(svg, /data:image\/png;base64,AAAA/);
   assert.match(svg, /Noto Kufi Arabic/);
+});
+
+
+test("wraps long Telegram job titles without overflowing the card", () => {
+  const svg = telegramJobCardSvg({
+    title: "أخصائي أول في إدارة المخاطر وسلامة المرضى وتطوير جودة الخدمات الصحية",
+    company: "شركة مثال",
+    city: "الرياض",
+    sector: "خاص",
+    expires_at: "2026-10-31"
+  });
+  const titleLines = [...svg.matchAll(/font-size="44"[^>]*>([^<]+)<\/text>/g)].map((match) => match[1]);
+  assert.ok(titleLines.length >= 1 && titleLines.length <= 2);
+  assert.ok(titleLines.every((line) => line.length <= 36));
 });

@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.30.0-telegram-dm-job-cards";
+const VERSION = "3.31.0-telegram-card-brand-polish";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4765,6 +4765,46 @@ function jobCardText(value, max = 54) {
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
 }
 
+const MASAA_WORDMARK_GREEN_PATH = "M 3,203 3,205 2,206 2,210 1,211 1,216 0,217 0,227 1,228 1,234 2,235 2,238 3,239 5,247 13,262 20,270 20,271 26,277 27,277 36,285 51,293 53,293 54,294 56,294 63,297 73,298 74,299 211,299 212,298 220,297 221,296 226,295 239,288 255,273 255,272 260,266 266,254 266,252 268,248 268,245 269,244 269,240 270,239 270,219 269,218 269,214 268,213 266,205 257,189 245,177 244,177 239,173 231,169 229,169 226,167 223,167 219,165 214,165 213,164 135,164 124,177 124,178 121,181 121,182 118,185 115,190 111,194 111,195 107,199 104,204 94,216 94,218 201,218 205,220 211,227 211,235 209,239 204,243 202,243 201,244 83,244 82,243 76,242 68,238 59,229 53,217 53,214 52,213 52,197 53,196 53,193 55,190 55,188 60,180 60,178 26,178 25,179 23,179 18,182 10,190 7,196 5,198 5,200 Z M 161,143 162,145 217,145 221,141 221,140 233,125 248,143 248,144 258,155 258,156 262,160 262,161 266,165 266,166 276,177 276,178 280,182 280,183 290,194 290,195 294,199 294,200 298,204 298,205 304,211 305,211 312,217 315,218 317,220 321,222 323,222 324,223 326,223 333,226 338,226 339,227 479,227 480,226 484,226 485,225 490,224 496,221 498,219 502,217 506,213 507,213 514,206 521,215 521,216 529,223 540,229 542,229 546,231 549,231 550,232 566,232 567,231 571,231 572,230 574,230 587,223 598,212 598,211 600,209 611,221 612,221 618,226 624,229 626,229 630,231 633,231 634,232 652,232 653,231 656,231 657,230 662,229 671,224 674,221 675,221 686,209 691,215 691,216 702,225 712,230 714,230 718,232 721,232 722,233 730,233 731,234 736,234 737,233 744,233 745,232 748,232 749,231 754,230 759,227 761,227 763,225 766,224 769,221 770,221 787,203 791,208 791,209 803,221 819,230 821,230 828,233 831,233 832,234 838,234 839,235 857,235 858,234 863,234 864,233 867,233 868,232 876,230 886,225 892,220 893,220 902,211 902,210 909,201 912,195 912,193 915,187 915,184 916,183 916,180 917,179 917,173 918,172 918,158 917,157 917,151 916,150 915,143 909,129 907,127 906,124 903,121 903,120 888,106 873,98 870,98 867,96 863,96 862,95 857,95 856,94 840,94 839,95 829,96 828,97 820,99 804,108 792,120 792,121 785,129 783,133 780,136 780,137 777,140 777,141 774,144 774,145 771,148 771,149 768,152 768,153 765,156 765,157 762,160 759,165 750,174 740,179 727,179 721,176 714,169 712,165 712,163 711,162 711,104 710,103 711,102 711,100 710,99 706,99 668,118 666,120 664,120 662,122 662,163 661,164 661,167 659,171 655,175 648,178 638,178 637,177 635,177 630,173 626,166 626,128 625,127 620,128 578,149 576,152 576,167 571,174 563,178 554,178 553,177 551,177 549,176 543,170 541,166 541,141 539,139 523,147 521,149 506,156 504,158 495,162 489,168 480,172 476,172 475,173 399,173 398,171 403,167 404,167 409,162 414,159 423,150 423,149 429,142 433,134 433,132 435,129 436,123 437,122 437,117 438,116 438,102 437,101 437,96 436,95 436,92 434,89 434,87 430,79 428,77 426,73 421,68 421,67 408,57 400,53 398,53 391,50 386,50 385,49 258,49 257,50 253,50 252,51 249,51 248,52 243,53 228,61 225,64 220,67 214,73 211,78 207,82 207,83 204,86 201,91 197,95 197,96 194,99 194,100 191,103 191,104 Z M 840,145 849,145 856,148 861,153 864,160 864,169 863,170 862,174 856,180 849,183 840,183 831,179 824,172 821,165 821,161 826,155 826,154 833,148 Z M 261,104 262,103 376,103 382,108 383,110 383,115 382,116 382,118 372,128 371,128 355,143 354,143 348,149 347,149 338,158 337,158 331,164 330,164 324,158 323,158 319,154 318,154 312,148 311,148 286,126 285,126 271,113 270,113 Z";
+const MASAA_WORDMARK_YELLOW_PATH = "M 756,276 748,276 747,277 744,277 737,281 732,287 730,294 729,295 729,308 732,315 737,320 744,323 756,323 757,322 759,322 760,323 759,327 755,331 751,333 736,333 735,337 734,338 734,341 733,342 733,346 735,346 736,347 750,348 751,347 755,347 762,344 768,339 774,327 774,323 775,322 775,299 774,298 774,294 773,293 773,291 770,285 764,279 757,277 Z M 748,290 754,290 758,293 760,297 760,307 759,308 747,308 743,304 743,302 742,301 743,299 743,296 Z M 374,295 374,303 375,304 376,310 378,312 378,313 384,319 390,322 393,322 394,323 429,323 430,322 435,322 436,321 443,321 444,322 448,322 449,323 547,323 548,322 553,321 556,318 557,318 562,308 562,276 551,278 548,280 548,305 545,308 456,308 455,306 457,304 457,302 458,301 458,289 457,288 457,286 454,281 448,275 441,273 440,272 434,272 433,273 427,274 418,282 415,289 415,300 416,301 417,305 419,307 418,308 396,308 392,306 390,304 389,300 388,299 388,293 391,286 390,285 377,285 377,287 375,290 375,294 Z M 434,286 439,286 441,287 443,289 445,293 445,297 444,298 444,300 443,302 439,305 434,305 432,304 428,299 428,292 429,290 Z M 687,251 684,255 684,259 685,261 689,264 695,264 698,261 698,259 699,258 699,256 697,252 694,250 689,250 Z M 576,253 576,275 575,276 575,278 576,279 576,283 575,284 575,305 576,306 576,310 577,311 577,313 579,315 579,316 583,320 587,322 590,322 591,323 702,323 703,322 708,321 710,319 711,319 717,311 717,309 719,305 719,294 718,293 718,290 715,284 707,276 703,274 700,274 699,273 686,273 685,274 683,274 680,276 676,277 673,280 672,280 666,286 665,288 664,287 664,250 655,251 654,252 651,252 650,253 650,307 649,308 593,308 590,305 590,293 589,292 589,288 590,287 590,268 589,267 590,265 590,251 589,250 587,250 586,251 582,251 581,252 578,252 Z M 705,296 705,301 704,302 704,304 700,308 665,308 664,307 668,300 676,292 686,287 696,287 700,289 703,292 Z M 436,250 435,251 433,251 430,254 429,256 429,260 430,262 434,265 439,265 441,263 442,263 444,259 444,256 440,251 Z M 548,248 544,252 544,254 543,255 543,260 544,261 544,263 540,265 540,271 548,271 549,270 562,270 564,269 564,262 554,262 551,259 551,256 554,254 556,254 558,256 560,256 562,254 562,250 558,247 550,247 Z M 805,1 804,2 798,3 789,8 786,11 785,11 777,20 771,34 771,39 770,40 770,48 771,49 771,54 772,55 772,58 776,66 781,72 781,73 789,80 792,81 794,83 796,83 802,86 806,86 807,87 820,87 821,86 825,86 831,83 833,83 835,81 838,80 845,74 845,73 849,69 849,68 853,63 853,61 855,58 856,52 857,51 857,36 856,35 856,31 854,28 853,24 851,22 849,18 840,9 839,9 834,5 827,3 826,2 824,2 823,1 816,1 815,0 813,0 812,1 Z";
+
+function telegramMasaaWordmarkSvg(x, y, width) {
+  const scale = Number(width) / 919;
+  return `<g transform="translate(${Number(x).toFixed(2)},${Number(y).toFixed(2)}) scale(${scale.toFixed(6)})">
+  <path d="${MASAA_WORDMARK_GREEN_PATH}" fill="#0F6B4F" fill-rule="evenodd"/>
+  <path d="${MASAA_WORDMARK_YELLOW_PATH}" fill="#F6B744" fill-rule="evenodd"/>
+</g>`;
+}
+
+function jobCardLines(value, maxChars = 31, maxLines = 2) {
+  const words = clean(value).split(/\s+/).filter(Boolean);
+  if (!words.length) return ["فرصة وظيفية"];
+
+  const lines = [];
+  let current = "";
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    const candidate = current ? current + " " + word : word;
+
+    if (candidate.length <= maxChars || !current) {
+      current = candidate;
+      continue;
+    }
+
+    lines.push(current);
+    current = word;
+
+    if (lines.length === maxLines - 1) {
+      const remainder = [current, ...words.slice(index + 1)].join(" ");
+      current = jobCardText(remainder, maxChars + 5);
+      break;
+    }
+  }
+
+  if (current && lines.length < maxLines) lines.push(current);
+  return lines.slice(0, maxLines);
+}
+
 function telegramCompanyDomain(job) {
   const sourceKey = clean(job?.source_key).toLowerCase();
   const company = clean(job?.company).toLowerCase();
@@ -4859,33 +4899,53 @@ async function telegramCompanyLogoDataUri(job) {
 }
 
 function telegramJobCardSvg(job, logoDataUri = "") {
-  const title = xmlEscape(jobCardText(job.title || "فرصة وظيفية", 58));
-  const company = xmlEscape(jobCardText(job.company || "جهة موثوقة", 48));
-  const city = xmlEscape(jobCardText(job.city || job.region || (job.remote ? "عن بُعد" : "السعودية"), 30));
-  const sector = xmlEscape(jobCardText(job.sector || "وظائف", 22));
-  const expiry = xmlEscape(jobCardText(job.expires_at || "راجع المصدر الرسمي", 28));
+  const titleLines = jobCardLines(job.title || "فرصة وظيفية", 31, 2).map(xmlEscape);
+  const company = xmlEscape(jobCardText(job.company || "جهة موثوقة", 44));
+  const city = xmlEscape(jobCardText(job.city || job.region || (job.remote ? "عن بُعد" : "السعودية"), 28));
+  const sector = xmlEscape(jobCardText(job.sector || "وظائف", 20));
+  const expiry = xmlEscape(jobCardText(job.expires_at || "راجع المصدر الرسمي", 24));
   const initial = xmlEscape(jobCardText(job.company || "م", 1) || "م");
   const logo = clean(logoDataUri);
   const logoMarkup = logo
-    ? `<rect x="510" y="265" width="180" height="180" rx="38" fill="#ffffff" stroke="#dce9e2" stroke-width="3"/><image x="535" y="290" width="130" height="130" href="${xmlEscape(logo)}" preserveAspectRatio="xMidYMid meet"/>`
-    : `<circle cx="600" cy="355" r="90" fill="#e8f3ed"/><text x="600" y="385" text-anchor="middle" font-size="86" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b">${initial}</text>`;
+    ? `<rect x="510" y="292" width="180" height="180" rx="40" fill="#ffffff" stroke="#dce9e2" stroke-width="3"/><image x="535" y="317" width="130" height="130" href="${xmlEscape(logo)}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<rect x="510" y="292" width="180" height="180" rx="40" fill="#f8faf9" stroke="#dce9e2" stroke-width="3"/><circle cx="600" cy="382" r="55" fill="#eaf4ef"/><text x="600" y="405" text-anchor="middle" font-size="55" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F">${initial}</text>`;
+
+  const titleStartY = titleLines.length > 1 ? 678 : 714;
+  const titleMarkup = titleLines.map((line, index) =>
+    `<text x="600" y="${titleStartY + index * 58}" text-anchor="middle" font-size="44" font-weight="700" font-family="Noto Kufi Arabic" fill="#0B4F3B" direction="rtl">${line}</text>`
+  ).join("");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
-  <rect width="1200" height="1200" fill="#f7faf6"/>
-  <path d="M0 0h1200v170H0z" fill="#0b4f3b"/>
-  <circle cx="1040" cy="85" r="50" fill="#f3c64e"/><text x="1040" y="103" text-anchor="middle" font-size="52" font-family="Noto Kufi Arabic" fill="#0b4f3b">م</text>
-  <text x="950" y="75" text-anchor="end" font-size="48" font-weight="700" font-family="Noto Kufi Arabic" fill="white" direction="rtl">مَسعى وظائف</text>
-  <text x="950" y="125" text-anchor="end" font-size="24" font-family="Noto Kufi Arabic" fill="#d8eee5" direction="rtl">فرص موثقة من المصدر الرسمي</text>
-  <rect x="70" y="220" width="1060" height="850" rx="42" fill="white" stroke="#dce9e2" stroke-width="3"/>
+  <rect width="1200" height="1200" fill="#F5F7F6"/>
+  <rect x="0" y="0" width="1200" height="190" fill="#FFFFFF"/>
+  <rect x="0" y="184" width="1200" height="6" fill="#F6B744"/>
+  ${telegramMasaaWordmarkSvg(816, 28, 314)}
+  <rect x="70" y="58" width="360" height="72" rx="36" fill="#EAF4EF"/>
+  <text x="250" y="103" text-anchor="middle" font-size="26" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">✓ متحقق من المصدر الرسمي</text>
+
+  <rect x="60" y="220" width="1080" height="900" rx="44" fill="#FFFFFF" stroke="#DCE9E2" stroke-width="3"/>
   ${logoMarkup}
-  <text x="600" y="490" text-anchor="middle" font-size="38" font-weight="700" font-family="Noto Kufi Arabic" fill="#263a33" direction="rtl">${company}</text>
-  <rect x="430" y="525" width="340" height="54" rx="27" fill="#e8f3ed"/><text x="600" y="562" text-anchor="middle" font-size="25" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">✓ المصدر الرسمي</text>
-  <text x="600" y="680" text-anchor="middle" font-size="48" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">${title}</text>
-  <rect x="120" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="390" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">الموقع</text><text x="390" y="846" text-anchor="end" font-size="27" font-family="Noto Kufi Arabic" fill="#3e514a" direction="rtl">${city}</text>
-  <rect x="450" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="720" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">القطاع</text><text x="720" y="846" text-anchor="end" font-size="27" font-family="Noto Kufi Arabic" fill="#3e514a" direction="rtl">${sector}</text>
-  <rect x="780" y="755" width="300" height="125" rx="24" fill="#f4f8f5"/><text x="1050" y="800" text-anchor="end" font-size="24" font-weight="700" font-family="Noto Kufi Arabic" fill="#0b4f3b" direction="rtl">آخر موعد</text><text x="1050" y="846" text-anchor="end" font-size="25" font-family="Noto Kufi Arabic" fill="#3e514a" direction="rtl">${expiry}</text>
-  <rect x="260" y="935" width="680" height="82" rx="41" fill="#0b4f3b"/><text x="600" y="987" text-anchor="middle" font-size="30" font-weight="700" font-family="Noto Kufi Arabic" fill="white" direction="rtl">التقديم من المصدر الرسمي</text>
-  <text x="600" y="1140" text-anchor="middle" font-size="24" font-family="Noto Kufi Arabic" fill="#60736b" direction="rtl">مَسعى — نتحقق من الوظيفة قبل نشرها</text>
+  <text x="600" y="530" text-anchor="middle" font-size="37" font-weight="700" font-family="Noto Kufi Arabic" fill="#263A33" direction="rtl">${company}</text>
+  <rect x="470" y="558" width="260" height="52" rx="26" fill="#F1F7F4"/>
+  <text x="600" y="593" text-anchor="middle" font-size="22" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">${sector}</text>
+
+  ${titleMarkup}
+
+  <rect x="105" y="820" width="300" height="120" rx="24" fill="#F6F9F7"/>
+  <text x="255" y="858" text-anchor="middle" font-size="21" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">الموقع</text>
+  <text x="255" y="907" text-anchor="middle" font-size="25" font-family="Noto Kufi Arabic" fill="#33473F" direction="rtl">${city}</text>
+
+  <rect x="450" y="820" width="300" height="120" rx="24" fill="#F6F9F7"/>
+  <text x="600" y="858" text-anchor="middle" font-size="21" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">القطاع</text>
+  <text x="600" y="907" text-anchor="middle" font-size="25" font-family="Noto Kufi Arabic" fill="#33473F" direction="rtl">${sector}</text>
+
+  <rect x="795" y="820" width="300" height="120" rx="24" fill="#F6F9F7"/>
+  <text x="945" y="858" text-anchor="middle" font-size="21" font-weight="700" font-family="Noto Kufi Arabic" fill="#0F6B4F" direction="rtl">آخر موعد</text>
+  <text x="945" y="907" text-anchor="middle" font-size="24" font-family="Noto Kufi Arabic" fill="#33473F" direction="rtl">${expiry}</text>
+
+  <rect x="270" y="980" width="660" height="84" rx="42" fill="#0F6B4F"/>
+  <text x="600" y="1033" text-anchor="middle" font-size="30" font-weight="700" font-family="Noto Kufi Arabic" fill="#FFFFFF" direction="rtl">التقديم من المصدر الرسمي ←</text>
+  <text x="600" y="1092" text-anchor="middle" font-size="20" font-family="Noto Kufi Arabic" fill="#71827A" direction="rtl">مَسعى — التقديم يتم لدى الجهة المعلنة</text>
 </svg>`;
 }
 
