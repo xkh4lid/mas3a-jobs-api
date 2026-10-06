@@ -99,6 +99,29 @@ const SUCCESSFACTORS_SOURCES = [
     listingUrls: [
       "https://career.sipchem.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
     ]
+  },
+  {
+    key: "alfanar",
+    name: "alfanar Careers",
+    company: "alfanar",
+    companyAr: "الفنار",
+    sector: "خاص",
+    host: "jobs.alfanar.com",
+    listingUrls: [
+      "https://jobs.alfanar.com/alfanar/go/All-Openings/4442101/?location=SAUDI&q=&sortColumn=referencedate&sortDirection=desc"
+    ]
+  },
+  {
+    key: "sasref",
+    name: "SASREF Careers",
+    company: "Saudi Aramco Jubail Refinery Company (SASREF)",
+    companyAr: "ساسرف",
+    sector: "خاص",
+    host: "careers.sasref.com.sa",
+    listingUrls: [
+      "https://careers.sasref.com.sa/viewalljobs/",
+      "https://careers.sasref.com.sa/go/All-Jobs-at-SASREF/2896901/"
+    ]
   }
 ];
 
@@ -193,7 +216,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.4.0";
+const VERSION = "3.5.0";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -381,7 +404,7 @@ function discoverPaginationUrls(html, source, baseUrl) {
     try {
       const parsed = new URL(url);
       if (parsed.hostname !== source.host) continue;
-      if (!/\/search\/?$/i.test(parsed.pathname)) continue;
+      if (!/(?:\/search\/?$|\/go\/[^?#]+\/?$|\/viewalljobs\/?$)/i.test(parsed.pathname)) continue;
       const startrow = Number(parsed.searchParams.get("startrow"));
       if (!Number.isFinite(startrow) || startrow <= 0) continue;
       parsed.hash = "";
@@ -402,8 +425,9 @@ function successFactorsSearchUrls(source) {
 
     for (const listingUrl of source.listingUrls || []) {
       const parsed = new URL(listingUrl);
-      if (parsed.pathname.startsWith("/saudi/")) {
-        urls.add(`${origin}/saudi/search/?q=&locationsearch=`);
+      const tenantPrefix = parsed.pathname.match(/^\/(?:([^/]+)\/)?(?:go|viewalljobs|search)(?:\/|$)/i)?.[1];
+      if (tenantPrefix) {
+        urls.add(`${origin}/${tenantPrefix}/search/?q=&locationsearch=`);
       }
     }
   } catch {
