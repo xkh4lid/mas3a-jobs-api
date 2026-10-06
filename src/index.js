@@ -2380,10 +2380,14 @@ async function quarantineInvalidMilitaryJobs(env) {
     `UPDATE jobs
      SET status = 'review', updated_at = ?
      WHERE status = 'verified'
-       AND source_key = 'sang-military'
+       AND source_key IN ('sang-military', 'spa-military')
        AND (
          apply_url IS NULL
-         OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+         OR (
+           apply_url NOT LIKE 'https://jobs.sang.gov.sa/%'
+           AND apply_url NOT LIKE 'https://jobs.sa/%'
+           AND apply_url NOT LIKE 'https://tajnid.mod.gov.sa/%'
+         )
        )`
   ).bind(timestamp).run();
   return Number(result.meta?.changes || 0);
