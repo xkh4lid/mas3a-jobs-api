@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.32.0-masaa-identity-card";
+const VERSION = "3.32.1-channel-identity-preview";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -5049,6 +5049,31 @@ async function telegramBootstrapChannel(env, channelId) {
   return { ok: true, published };
 }
 
+const TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY = "channel_identity_preview_2026_10_07_v1";
+
+async function telegramPublishChannelIdentityPreviewOnce(env) {
+  const channelId = await resolveTelegramChannelId(env);
+  if (!channelId) return { ok: true, skipped: true, reason: "channel_not_connected" };
+
+  const alreadyPublished = await telegramGetMeta(env, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY);
+  if (alreadyPublished) {
+    return { ok: true, skipped: true, reason: "already_published", job_id: alreadyPublished };
+  }
+
+  const jobs = await telegramLatestVerifiedJobs(env, 1);
+  const job = jobs[0];
+  if (!job) return { ok: true, skipped: true, reason: "no_verified_jobs" };
+
+  const sent = await telegramSendChannelJob(env, channelId, job);
+  if (!sent.ok) {
+    return { ok: false, published: 0, error: sent.error || "channel_identity_preview_failed" };
+  }
+
+  await telegramMarkDelivered(env, job.id, "channel:" + channelId);
+  await telegramSetMeta(env, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, String(job.id));
+  return { ok: true, published: 1, job_id: String(job.id) };
+}
+
 async function telegramPublishChannelUpdates(env) {
   const channelId = await resolveTelegramChannelId(env);
   if (!channelId) return { ok: true, skipped: true, reason: "channel_not_connected" };
@@ -5184,9 +5209,15 @@ async function telegramNotifySubscribers(env) {
 async function publishTelegramUpdates(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: true, skipped: true, reason: "token_not_configured" };
   await ensureTelegramStorage(env);
+  const preview = await telegramPublishChannelIdentityPreviewOnce(env);
   const channel = await telegramPublishChannelUpdates(env);
   const subscribers = await telegramNotifySubscribers(env);
-  return { ok: channel.ok !== false && subscribers.ok !== false, channel, subscribers };
+  return {
+    ok: preview.ok !== false && channel.ok !== false && subscribers.ok !== false,
+    preview,
+    channel,
+    subscribers
+  };
 }
 
 async function handleTelegramWebhook(request, env) {
@@ -5511,7 +5542,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramJobCardUrl };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramJobCardUrl, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY };
 
 export default {
   async fetch(request, env) {
