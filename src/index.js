@@ -290,8 +290,17 @@ const sha256 = async (value) => {
 };
 
 function externalIdFromUrl(url) {
-  const match = String(url).match(/\/(\d{4,})\/?(?:[?#]|$)/);
-  return match?.[1] || null;
+  const text = String(url ?? "");
+  const pathMatch = text.match(/\/(\d{4,})\/?(?:[?#]|$)/);
+  if (pathMatch?.[1]) return pathMatch[1];
+  try {
+    const parsed = new URL(text);
+    for (const key of ["jobId", "jobid", "job", "id", "reqId", "requisitionId"]) {
+      const value = parsed.searchParams.get(key);
+      if (/^\d{4,}$/.test(value || "")) return value;
+    }
+  } catch {}
+  return null;
 }
 
 function normalizeDigits(value) {
@@ -361,9 +370,10 @@ function discoverJobUrls(html, source, baseUrl) {
 
     try {
       const parsed = new URL(url);
-      if (parsed.hostname !== source.host) return;
-      if (!/\/job\//i.test(parsed.pathname)) return;
-      if (!/\/\d{4,}\/?$/i.test(parsed.pathname)) return;
+      if (!isAllowedOfficialUrl(parsed.href, source)) return;
+      const looksLikeJob = /\/job(?:\/|s\/)/i.test(parsed.pathname) ||
+        /(?:jobId|jobid|reqId|requisitionId)=\d{4,}/i.test(parsed.search);
+      if (!looksLikeJob || !externalIdFromUrl(parsed.href)) return;
       found.add(parsed.href);
     } catch {
       // Ignore invalid URLs.
