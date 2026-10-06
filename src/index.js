@@ -2318,6 +2318,12 @@ async function syncMilitaryNewsSource(env, source) {
   // صفحة أخبار رسمية ناجحة بلا أي روابط أخبار غالبًا تعني أن بنية الصفحة تغيّرت
   // أو أن الاستخراج تعطل. لا نغيّر حالات الوظائف الموجودة في هذه الحالة.
   if (articleUrls.size === 0) {
+    if (source.allowEmptyListing) {
+      await reviewMissingMilitaryJobs(env, source.key, []);
+      await upsertSource(env, source, { success: true, jobsSeen: 0, newJobs: 0, error: null, status: "ok" }, "official_news");
+      return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 0 };
+    }
+
     const message = "Official military listing loaded but no announcement URLs were discovered; existing jobs were left unchanged.";
     await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "needs_review" }, "official_news");
     return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
@@ -2329,7 +2335,7 @@ async function syncMilitaryNewsSource(env, source) {
   const seenExternalIds = [];
 
   const allArticleUrls = [...articleUrls];
-  const processedArticleUrls = allArticleUrls.slice(0, 12);
+  const processedArticleUrls = allArticleUrls.slice(0, Math.max(1, Math.min(Number(source.maxArticles) || 12, 12)));
 
   for (const url of processedArticleUrls) {
     try {
