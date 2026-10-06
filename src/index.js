@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.16.1-security";
+const VERSION = "3.16.2-security";
 const LOCALIZATION_VERSION = "ar-v7-title";
 const nowIso = () => new Date().toISOString();
 
@@ -3729,7 +3729,8 @@ async function stats(env) {
         SUM(CASE WHEN sector = 'عسكري' THEN 1 ELSE 0 END) AS military,
         SUM(CASE WHEN sector = 'خاص' THEN 1 ELSE 0 END) AS private,
         SUM(CASE WHEN date(updated_at) = date('now') THEN 1 ELSE 0 END) AS verified_today,
-        COUNT(DISTINCT company) AS active_companies
+        COUNT(DISTINCT company) AS active_companies,
+        MAX(updated_at) AS updated_at
       FROM jobs
       WHERE status = 'verified'
         AND NOT (
