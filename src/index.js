@@ -297,7 +297,7 @@ function successFactorsSourceByKey(key) {
 }
 
 const CATCHUP_TARGET_JOBS = 60;
-const CATCHUP_SOURCE_ORDER = ["alfanar", "acwa-power", "tasnee"];
+const CATCHUP_SOURCE_ORDER = [...SCHEDULED_SOURCE_ORDER];
 
 async function verifiedJobCount(env) {
   const row = await env.DB.prepare(
@@ -312,7 +312,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.10.0";
+const VERSION = "3.11.0";
 const LOCALIZATION_VERSION = "ar-v5";
 const nowIso = () => new Date().toISOString();
 
@@ -912,7 +912,7 @@ function hasLatinWords(value) {
 function stripResidualLatin(value) {
   return clean(
     String(value ?? "")
-      .replace(/\b[A-Za-z][A-Za-z0-9+.#/&\'’\-]*\b/g, " ")
+      .replace(/[A-Za-z][A-Za-z0-9+.#/&\'’\-]*/g, " ")
       .replace(/\(\s*\)/g, " ")
       .replace(/\s+([،؛:,.!?])/g, "$1")
   );
@@ -2392,6 +2392,61 @@ async function syncListingSnapshotSource(env, source, maxNewJobs = 60) {
   };
 }
 
+async function runCatchupListingSourceBatch(env, sourceKey, target = CATCHUP_TARGET_JOBS) {
+  const activeRun = await activeSyncRun(env);
+  if (activeRun) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "sync_already_running",
+      active_run_id: activeRun.id,
+      active_started_at: activeRun.started_at
+    };
+  }
+
+  await ensureCatalogSources(env);
+  await expirePastDeadlineJobs(env);
+  await quarantineInvalidMilitaryJobs(env);
+
+  const currentTotal = await verifiedJobCount(env);
+  if (currentTotal >= target) {
+    return { ok: true, skipped: true, reason: "catchup_target_reached", total: currentTotal };
+  }
+
+  const source = successFactorsSourceByKey(sourceKey);
+  if (!source) {
+    return { ok: false, skipped: true, reason: "unknown_source", source: sourceKey };
+  }
+
+  const { startedAt, runId } = await beginSyncRun(env);
+  const needed = Math.max(1, target - currentTotal);
+  const result = await syncListingSnapshotSource(env, source, Math.min(needed, 20));
+  const summary = {
+    sourcesChecked: 1,
+    jobsSeen: result.jobsSeen || 0,
+    jobsAdded: result.added || 0,
+    jobsUpdated: result.updated || 0,
+    errors: result.errors || 0
+  };
+  const finishedAt = await finishSyncRun(env, runId, summary);
+  const total = await verifiedJobCount(env);
+
+  return {
+    ok: (result.errors || 0) === 0,
+    mode: "listing_catchup_single",
+    target,
+    total,
+    source: source.key,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    jobs_seen: result.jobsSeen || 0,
+    jobs_added: result.added || 0,
+    jobs_updated: result.updated || 0,
+    errors: result.errors || 0,
+    result
+  };
+}
+
 async function runCatchupListingBatch(env, target = CATCHUP_TARGET_JOBS) {
   const activeRun = await activeSyncRun(env);
   if (activeRun) {
@@ -2930,6 +2985,13 @@ async function stats(env) {
         COUNT(DISTINCT company) AS active_companies
       FROM jobs
       WHERE status = 'verified'
+        AND NOT (
+          source_key = 'sang-military'
+          AND (
+            apply_url IS NULL
+            OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+          )
+        )
     `
   ).first();
 
@@ -2966,7 +3028,18 @@ async function getJobById(id, env) {
 
 async function sitemapJobs(env) {
   const result = await env.DB.prepare(
-    `SELECT id, updated_at FROM jobs WHERE status = 'verified' ORDER BY COALESCE(updated_at, discovered_at) DESC LIMIT 5000`
+    `SELECT id, updated_at
+     FROM jobs
+     WHERE status = 'verified'
+       AND NOT (
+         source_key = 'sang-military'
+         AND (
+           apply_url IS NULL
+           OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+         )
+       )
+     ORDER BY COALESCE(updated_at, discovered_at) DESC
+     LIMIT 5000`
   ).all();
   return { ok: true, jobs: result.results || [] };
 }
@@ -3221,7 +3294,12 @@ export default {
       const totalJobs = await verifiedJobCount(env);
 
       if (totalJobs < CATCHUP_TARGET_JOBS) {
-        return runCatchupListingBatch(env, CATCHUP_TARGET_JOBS);
+        const minute = new Date(controller.scheduledTime).getUTCMinutes();
+        return runCatchupListingSourceBatch(
+          env,
+          catchupSourceKeyForMinute(minute),
+          CATCHUP_TARGET_JOBS
+        );
       }
 
       if (controller.cron === "17 * * * *") {
