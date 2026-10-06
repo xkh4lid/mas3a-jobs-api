@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.17.0-security";
+const VERSION = "3.18.0-marketing";
 const LOCALIZATION_VERSION = "ar-v7-title";
 const nowIso = () => new Date().toISOString();
 
@@ -4006,6 +4006,132 @@ async function createContactSubmission(request, env) {
   return { status: 201, body: { ok: true, ticket: id } };
 }
 
+
+const ANALYTICS_EVENTS = new Set(["page_view", "job_view", "share", "apply_click"]);
+
+function analyticsDimension(value, max = 100) {
+  return clean(value)
+    .slice(0, max)
+    .replace(/[^A-Za-z0-9._-]/g, "");
+}
+
+function analyticsPath(value) {
+  const path = clean(value).slice(0, 180);
+  return /^\/[A-Za-z0-9_\-./%]*$/.test(path) ? path : "/";
+}
+
+function riyadhDate() {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Riyadh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date());
+  } catch {
+    return nowIso().slice(0, 10);
+  }
+}
+
+async function ensureAnalyticsTable(env) {
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS analytics_daily (
+      date TEXT NOT NULL,
+      event TEXT NOT NULL,
+      path TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      medium TEXT NOT NULL DEFAULT '',
+      campaign TEXT NOT NULL DEFAULT '',
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (date, event, path, source, medium, campaign)
+    )`
+  ).run();
+}
+
+async function recordMarketingEvent(request, env) {
+  const contentType = clean(request.headers.get("Content-Type")).toLowerCase();
+  if (!contentType.includes("application/json")) {
+    return { status: 415, body: { ok: false, error: "Content-Type must be application/json" } };
+  }
+
+  const parsed = await readJsonBodyLimited(request, 4096);
+  if (!parsed.ok) return { status: parsed.status, body: { ok: false, error: parsed.error } };
+
+  const event = analyticsDimension(parsed.data?.event, 40);
+  if (!ANALYTICS_EVENTS.has(event)) {
+    return { status: 400, body: { ok: false, error: "Invalid analytics event" } };
+  }
+
+  const path = analyticsPath(parsed.data?.path || "/");
+  const source = analyticsDimension(parsed.data?.source, 60);
+  const medium = analyticsDimension(parsed.data?.medium, 60);
+  const campaign = analyticsDimension(parsed.data?.campaign, 80);
+
+  await ensureAnalyticsTable(env);
+  await env.DB.prepare(
+    `INSERT INTO analytics_daily (date, event, path, source, medium, campaign, count)
+     VALUES (?, ?, ?, ?, ?, ?, 1)
+     ON CONFLICT(date, event, path, source, medium, campaign)
+     DO UPDATE SET count = analytics_daily.count + 1`
+  ).bind(riyadhDate(), event, path, source, medium, campaign).run();
+
+  return { status: 202, body: { ok: true } };
+}
+
+async function marketingAnalyticsSummary(env, days = 30) {
+  await ensureAnalyticsTable(env);
+  const safeDays = Math.min(Math.max(Number(days) || 30, 1), 90);
+  const since = `-${safeDays - 1} days`;
+
+  const totals = await env.DB.prepare(
+    `SELECT event, SUM(count) AS count
+     FROM analytics_daily
+     WHERE date >= date('now', ?)
+     GROUP BY event
+     ORDER BY count DESC`
+  ).bind(since).all();
+
+  const channels = await env.DB.prepare(
+    `SELECT source, medium, campaign, SUM(count) AS count
+     FROM analytics_daily
+     WHERE date >= date('now', ?)
+       AND (source <> '' OR medium <> '' OR campaign <> '')
+     GROUP BY source, medium, campaign
+     ORDER BY count DESC
+     LIMIT 50`
+  ).bind(since).all();
+
+  const pages = await env.DB.prepare(
+    `SELECT path, SUM(count) AS count
+     FROM analytics_daily
+     WHERE date >= date('now', ?)
+       AND event IN ('page_view','job_view')
+     GROUP BY path
+     ORDER BY count DESC
+     LIMIT 50`
+  ).bind(since).all();
+
+  const daily = await env.DB.prepare(
+    `SELECT date, SUM(CASE WHEN event IN ('page_view','job_view') THEN count ELSE 0 END) AS views,
+            SUM(CASE WHEN event = 'share' THEN count ELSE 0 END) AS shares,
+            SUM(CASE WHEN event = 'apply_click' THEN count ELSE 0 END) AS apply_clicks
+     FROM analytics_daily
+     WHERE date >= date('now', ?)
+     GROUP BY date
+     ORDER BY date ASC`
+  ).bind(since).all();
+
+  return {
+    ok: true,
+    privacy: "aggregate_only_no_ip_no_user_identifier",
+    days: safeDays,
+    totals: totals.results || [],
+    channels: channels.results || [],
+    pages: pages.results || [],
+    daily: daily.results || []
+  };
+}
+
 async function handleRequest(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(env) });
@@ -4031,6 +4157,7 @@ async function handleRequest(request, env) {
       path.startsWith("/jobs/") ||
       path === "/sources" ||
       path === "/stats" ||
+      path === "/analytics/summary" ||
       path === "/sitemap");
 
   if (isPublicApiRead) {
@@ -4064,6 +4191,16 @@ async function handleRequest(request, env) {
     }
   }
 
+  if (request.method === "POST" && path === "/analytics/event") {
+    const allowed = await rateLimitAllowed(
+      env.API_RATE_LIMITER,
+      requestRateKey(request, "analytics")
+    );
+    if (!allowed) {
+      return json({ ok: false, error: "Too many requests" }, env, 429, { "Retry-After": "60" });
+    }
+  }
+
   if (request.method === "GET" && path === "/") {
     return json({ ok: true, service: "Masaa Jobs API" }, env);
   }
@@ -4091,6 +4228,15 @@ async function handleRequest(request, env) {
     } catch (error) { return internalError(error, env); }
   }
 
+  if (request.method === "POST" && path === "/analytics/event") {
+    try {
+      const result = await recordMarketingEvent(request, env);
+      return json(result.body, env, result.status, { "Cache-Control": "no-store" });
+    } catch (error) {
+      return internalError(error, env);
+    }
+  }
+
   if (request.method === "POST" && path === "/contact") {
     try {
       const result = await createContactSubmission(request, env);
@@ -4113,6 +4259,19 @@ async function handleRequest(request, env) {
       return json(await listSources(env), env, 200, {
         "Cache-Control": "public, max-age=60, s-maxage=120"
       });
+    } catch (error) {
+      return internalError(error, env);
+    }
+  }
+
+  if (request.method === "GET" && path === "/analytics/summary") {
+    try {
+      return json(
+        await marketingAnalyticsSummary(env, url.searchParams.get("days")),
+        env,
+        200,
+        { "Cache-Control": "public, max-age=60, s-maxage=120" }
+      );
     } catch (error) {
       return internalError(error, env);
     }
