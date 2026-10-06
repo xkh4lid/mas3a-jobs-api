@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.25.0-telegram-24x7";
+const VERSION = "3.26.0-telegram-discovery-seo";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4578,6 +4578,32 @@ async function ensureTelegramCommands(env) {
   return result;
 }
 
+async function ensureTelegramChannelDiscoveryProfile(env) {
+  await ensureTelegramStorage(env);
+  if (await telegramGetMeta(env, "channel_discovery_profile_v1")) {
+    return { ok: true, unchanged: true };
+  }
+
+  const channelId = await resolveTelegramChannelId(env);
+  if (!channelId) return { ok: true, skipped: true, reason: "channel_not_connected" };
+
+  const description = [
+    "مَسعى | وظائف سعودية",
+    "وظائف حكومية وعسكرية ووظائف شركات داخل السعودية من مصادرها الرسمية.",
+    "وظائف الرياض، جدة، الشرقية، عن بُعد، وحديثي التخرج مع روابط التقديم الأصلية."
+  ].join("\n");
+
+  const result = await telegramApi(env, "setChatDescription", {
+    chat_id: channelId,
+    description
+  });
+
+  if (result.ok) {
+    await telegramSetMeta(env, "channel_discovery_profile_v1", "1");
+  }
+  return result;
+}
+
 function telegramStartText() {
   return [
     "أهلًا بك في بوت مَسعى للوظائف 👋",
@@ -4661,16 +4687,59 @@ function telegramJobLine(job, index = null) {
   return lines.join("\n");
 }
 
+function telegramHashtag(value) {
+  const tag = clean(value)
+    .replace(/[أإآ]/g, "ا")
+    .replace(/[^؀-ۿ0-9A-Za-z]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+  return tag ? "#" + tag.slice(0, 55) : "";
+}
+
+function telegramJobDiscoveryHashtags(job) {
+  const tags = ["#وظائف_السعودية"];
+
+  const city = clean(job.city);
+  if (city && city !== "السعودية") {
+    const cityTag = telegramHashtag("وظائف " + city);
+    if (cityTag) tags.push(cityTag);
+  }
+
+  const sector = clean(job.sector);
+  if (sector === "حكومي") tags.push("#وظائف_حكومية");
+  else if (sector === "عسكري") tags.push("#وظائف_عسكرية");
+  else if (sector === "خاص") tags.push("#وظائف_شركات");
+
+  if (job.remote || clean(job.work_mode) === "عن بُعد") {
+    tags.push("#وظائف_عن_بعد");
+  } else if (job.fresh_graduate) {
+    tags.push("#حديثي_التخرج");
+  }
+
+  return [...new Set(tags)].slice(0, 4).join(" ");
+}
+
 function telegramChannelJobText(job) {
-  const lines = ["💼 وظيفة جديدة | مَسعى", "", "المسمى: " + clean(job.title), "الجهة: " + clean(job.company)];
-  if (clean(job.city) && clean(job.city) !== "السعودية") lines.push("المدينة: " + clean(job.city));
+  const title = clean(job.title);
+  const company = clean(job.company);
+  const city = clean(job.city);
+  const locationLabel = city && city !== "السعودية" ? city : "السعودية";
+  const headline = "💼 وظائف " + locationLabel + " | " + title + (company ? " – " + company : "");
+
+  const lines = [headline, "", "المسمى: " + title, "الجهة: " + company];
+  if (city && city !== "السعودية") lines.push("المدينة: " + city);
   if (clean(job.sector)) lines.push("القطاع: " + clean(job.sector));
   if (clean(job.salary)) lines.push("الراتب: " + clean(job.salary));
   if (clean(job.work_mode)) lines.push("نمط العمل: " + clean(job.work_mode));
   if (clean(job.qualification) && clean(job.qualification).length <= 140) lines.push("المؤهل: " + clean(job.qualification));
   if (clean(job.experience) && clean(job.experience).length <= 140) lines.push("الخبرة: " + clean(job.experience));
   if (clean(job.expires_at)) lines.push("آخر موعد: " + clean(job.expires_at));
+
   lines.push("", "✅ متحقق من المصدر الرسمي");
+
+  const hashtags = telegramJobDiscoveryHashtags(job);
+  if (hashtags) lines.push("", hashtags);
+
   return lines.join("\n");
 }
 
@@ -5183,6 +5252,7 @@ export default {
       try {
         await ensureTelegramWebhook(env);
         await ensureTelegramCommands(env);
+        await ensureTelegramChannelDiscoveryProfile(env);
         await publishTelegramUpdates(env);
       } catch (error) {
         console.error("mas3a_telegram_scheduled_pre_sync_error", clean(error?.message || error));
