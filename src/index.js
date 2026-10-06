@@ -3683,11 +3683,11 @@ function isIncompleteArabicJobTitle(value) {
 function jobTitleOverrideFromUrl(value) {
   const url = clean(value);
 
-  if (/\/ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_?\//i.test(url)) {
+  if (/ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_?/i.test(url)) {
     return "أخصائي مشارك في إدارة المخاطر وسلامة المرضى";
   }
 
-  if (/\/ERM-&-PATIENT-SAFETY-SPECIALIST_?\//i.test(url)) {
+  if (/ERM-&-PATIENT-SAFETY-SPECIALIST_?/i.test(url)) {
     return "أخصائي إدارة المخاطر وسلامة المرضى";
   }
 
