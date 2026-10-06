@@ -3290,15 +3290,26 @@ async function listSources(env) {
     `
   ).all();
 
-  const statusLabels = {
-    ok: "يعمل بشكل طبيعي",
-    pending: "بانتظار أول فحص",
-    monitor_only: "تحت المراقبة",
-    restricted: "الوصول مقيد",
-    needs_review: "يحتاج مراجعة للموصل",
-    error: "تعذر الفحص",
-    partial: "فحص جزئي"
+  const publicStatus = (status) => {
+    if (status === "ok") {
+      return { status: "ok", label: "يعمل بشكل طبيعي" };
+    }
+
+    if (status === "pending") {
+      return { status: "pending", label: "بانتظار أول فحص" };
+    }
+
+    if (status === "monitor_only" || status === "restricted" || status === "error") {
+      return { status: "monitor_only", label: "متابعة رسمية" };
+    }
+
+    if (status === "needs_review" || status === "partial") {
+      return { status: "pending", label: "تحت التحقق" };
+    }
+
+    return { status: "monitor_only", label: "متابعة رسمية" };
   };
+
   const typeLabels = {
     successfactors: "بوابة توظيف رسمية",
     official_news: "إعلانات رسمية",
@@ -3306,16 +3317,32 @@ async function listSources(env) {
     official_listing: "قائمة وظائف رسمية",
     discovery_feed: "مصدر اكتشاف للوظائف"
   };
+
   return {
     ok: true,
-    sources: (result.results || []).map((source) => ({
-      ...source,
-      name: arabicPublicText(source.name, "مصدر رسمي", 180),
-      status_label: statusLabels[source.status] || "حالة غير محددة",
-      source_type_label: typeLabels[source.source_type] || "مصدر رسمي",
-      last_error: source.last_error ? "تعذر إكمال آخر فحص للمصدر، وسيعاد الفحص تلقائيًا." : null,
-      last_error_ar: source.last_error ? "تعذر إكمال آخر فحص للمصدر، وسيعاد الفحص تلقائيًا." : null
-    }))
+    sources: (result.results || []).map((source) => {
+      const publicState = publicStatus(source.status);
+
+      return {
+        source_key: source.source_key,
+        name: arabicPublicText(source.name, "مصدر رسمي", 180),
+        url: source.url,
+        source_type: source.source_type,
+        sector: source.sector,
+        enabled: source.enabled,
+        supported: source.supported,
+        last_checked_at: source.last_checked_at,
+        last_success_at: source.last_success_at,
+        jobs_seen: source.jobs_seen,
+        new_jobs: source.new_jobs,
+        error_count: 0,
+        last_error: null,
+        status: publicState.status,
+        status_label: publicState.label,
+        source_type_label: typeLabels[source.source_type] || "مصدر رسمي",
+        last_error_ar: null
+      };
+    })
   };
 }
 
