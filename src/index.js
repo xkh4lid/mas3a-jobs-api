@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.18.1-title-quality";
+const VERSION = "3.19.0-telegram-start";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4211,6 +4211,136 @@ async function marketingAnalyticsSummary(env, days = 30) {
   };
 }
 
+
+const TELEGRAM_WEBHOOK_PATH = "/telegram/webhook";
+const MASAA_SITE_URL = "https://mas3a.pages.dev/";
+
+async function telegramDerivedWebhookSecret(env) {
+  if (!env.TELEGRAM_BOT_TOKEN) return "";
+  return (await sha256(`masaa:telegram:webhook:${env.TELEGRAM_BOT_TOKEN}`)).slice(0, 64);
+}
+
+async function telegramApi(env, method, payload = {}) {
+  if (!env.TELEGRAM_BOT_TOKEN) {
+    return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
+  }
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+
+  let body = null;
+  try { body = await response.json(); } catch {}
+
+  if (!response.ok || body?.ok !== true) {
+    console.error("mas3a_telegram_api_error", method, response.status, body?.description || "unknown");
+    return { ok: false, status: response.status, error: body?.description || "Telegram API error" };
+  }
+
+  return { ok: true, result: body.result };
+}
+
+async function ensureTelegramWebhook(env) {
+  if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, skipped: true, reason: "token_not_configured" };
+
+  const secretToken = await telegramDerivedWebhookSecret(env);
+  const webhookUrl = `https://mas3a-jobs-api.xn4wafc.workers.dev${TELEGRAM_WEBHOOK_PATH}`;
+
+  const info = await telegramApi(env, "getWebhookInfo");
+  if (
+    info.ok &&
+    clean(info.result?.url) === webhookUrl &&
+    Number(info.result?.max_connections || 0) === 40
+  ) {
+    return { ok: true, unchanged: true, url: webhookUrl };
+  }
+
+  const setResult = await telegramApi(env, "setWebhook", {
+    url: webhookUrl,
+    secret_token: secretToken,
+    allowed_updates: ["message"],
+    drop_pending_updates: false,
+    max_connections: 40
+  });
+
+  return setResult.ok
+    ? { ok: true, configured: true, url: webhookUrl }
+    : setResult;
+}
+
+function telegramStartText() {
+  return [
+    "أهلًا بك في بوت مَسعى للوظائف 👋",
+    "",
+    "نساعدك تتابع أحدث الفرص الوظيفية الموثوقة من مصادرها الرسمية.",
+    "",
+    "🔎 تصفح الوظائف من مَسعى:",
+    MASAA_SITE_URL,
+    "",
+    "قريبًا: تنبيهات وظائف حسب المجال والمدينة."
+  ].join("\n");
+}
+
+async function handleTelegramWebhook(request, env) {
+  if (!env.TELEGRAM_BOT_TOKEN) {
+    return json({ ok: false, error: "Telegram bot is not configured" }, env, 503);
+  }
+
+  const expectedSecret = await telegramDerivedWebhookSecret(env);
+  const receivedSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
+  if (!secureEqual(receivedSecret, expectedSecret)) {
+    return json({ ok: false, error: "Unauthorized" }, env, 401, { "Cache-Control": "no-store" });
+  }
+
+  const declaredLength = Number(request.headers.get("Content-Length") || 0);
+  if (declaredLength > 131072) {
+    return json({ ok: false, error: "Payload too large" }, env, 413, { "Cache-Control": "no-store" });
+  }
+
+  let update = null;
+  try {
+    update = await request.json();
+  } catch {
+    return json({ ok: false, error: "Invalid JSON" }, env, 400, { "Cache-Control": "no-store" });
+  }
+
+  const message = update?.message;
+  const chatId = message?.chat?.id;
+  const text = clean(message?.text || "");
+  if (!chatId || !text) {
+    return json({ ok: true, ignored: true }, env, 200, { "Cache-Control": "no-store" });
+  }
+
+  const command = text.split(/\s+/)[0].split("@")[0].toLowerCase();
+
+  if (command === "/start" || command === "/help") {
+    const sent = await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: telegramStartText(),
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "💼 تصفح الوظائف", url: MASAA_SITE_URL }
+        ]]
+      }
+    });
+
+    return json(
+      sent.ok ? { ok: true } : { ok: false, error: "Telegram send failed" },
+      env,
+      sent.ok ? 200 : 502,
+      { "Cache-Control": "no-store" }
+    );
+  }
+
+  return json({ ok: true, ignored: true }, env, 200, { "Cache-Control": "no-store" });
+}
+
 async function handleRequest(request, env) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(env) });
@@ -4218,6 +4348,22 @@ async function handleRequest(request, env) {
 
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
+
+  if (request.method === "POST" && path === TELEGRAM_WEBHOOK_PATH) {
+    try {
+      return await handleTelegramWebhook(request, env);
+    } catch (error) {
+      return internalError(error, env);
+    }
+  }
+
+  if (request.method === "GET" && path === "/telegram/status") {
+    return json({
+      ok: true,
+      configured: Boolean(env.TELEGRAM_BOT_TOKEN),
+      webhook_path: TELEGRAM_WEBHOOK_PATH
+    }, env, 200, { "Cache-Control": "no-store" });
+  }
 
   if (!["GET", "POST"].includes(request.method)) {
     return json(
@@ -4393,6 +4539,7 @@ export default {
 
   async scheduled(controller, env, ctx) {
     ctx.waitUntil((async () => {
+      await ensureTelegramWebhook(env);
       const totalJobs = await verifiedJobCount(env);
 
       if (totalJobs < CATCHUP_TARGET_JOBS) {
