@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.24.0-telegram-site-channel-link";
+const VERSION = "3.25.0-telegram-24x7";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -5180,25 +5180,37 @@ export default {
 
   async scheduled(controller, env, ctx) {
     ctx.waitUntil((async () => {
-      await ensureTelegramWebhook(env);
-      await ensureTelegramCommands(env);
-      await publishTelegramUpdates(env);
+      try {
+        await ensureTelegramWebhook(env);
+        await ensureTelegramCommands(env);
+        await publishTelegramUpdates(env);
+      } catch (error) {
+        console.error("mas3a_telegram_scheduled_pre_sync_error", clean(error?.message || error));
+      }
+
       const totalJobs = await verifiedJobCount(env);
+      let syncResult = null;
 
       if (totalJobs < CATCHUP_TARGET_JOBS) {
         const minute = new Date(controller.scheduledTime).getUTCMinutes();
-        return runCatchupListingSourceBatch(
+        syncResult = await runCatchupListingSourceBatch(
           env,
           catchupSourceKeyForMinute(minute),
           CATCHUP_TARGET_JOBS
         );
+      } else if (controller.cron === "17 * * * *") {
+        syncResult = await runSupportBatch(env);
+      } else {
+        const minute = new Date(controller.scheduledTime).getUTCMinutes();
+        syncResult = await runSourceBatch(env, scheduledSourceKeyForMinute(minute));
       }
 
-      if (controller.cron === "17 * * * *") {
-        return runSupportBatch(env);
+      try {
+        await publishTelegramUpdates(env);
+      } catch (error) {
+        console.error("mas3a_telegram_scheduled_post_sync_error", clean(error?.message || error));
       }
 
-      const minute = new Date(controller.scheduledTime).getUTCMinutes();
-      return runSourceBatch(env, scheduledSourceKeyForMinute(minute));
+      return syncResult;
     })());
   }};
