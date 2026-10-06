@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.21.0-structured-field-cleanup";
+const VERSION = "3.22.0-rich-job-details";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -1234,6 +1234,73 @@ function sanitizeExperienceField(value) {
   return text || null;
 }
 
+
+function sanitizeSalaryField(value) {
+  let text = clean(removeBoilerplate(value));
+  if (!text || containsCookieNoise(text)) return null;
+
+  text = normalizeDigits(text)
+    .replace(/\bSAR\b/gi, "ريال")
+    .replace(/\bSR\b/gi, "ريال")
+    .replace(/\bSaudi Riyals?\b/gi, "ريال سعودي")
+    .replace(/\bper month\b/gi, "شهريًا")
+    .replace(/\bmonthly\b/gi, "شهري")
+    .replace(/\bper year\b/gi, "سنويًا")
+    .replace(/\bannually\b/gi, "سنوي")
+    .replace(/\bcompetitive salary\b/gi, "راتب تنافسي")
+    .replace(/\bcompetitive\b/gi, "تنافسي");
+
+  text = clean(text).slice(0, 180);
+  if (!text) return null;
+
+  const hasSalarySignal =
+    /(?:راتب|ريال|ر\.?\s?س|أجر|مكافأة|بدل|salary|compensation|pay|wage)/i.test(text);
+  const hasAmount = /\d/.test(text);
+
+  if (!hasSalarySignal && !hasAmount) return null;
+  return text;
+}
+
+function extractSalaryFromDetail(visibleHtml, fullText) {
+  const labeled =
+    visibleFieldFromHtml(
+      visibleHtml,
+      [
+        "Salary", "Salary Range", "Monthly Salary", "Compensation",
+        "Pay", "Pay Range", "Base Salary",
+        "الراتب", "نطاق الراتب", "الراتب الشهري", "الأجر", "التعويض"
+      ],
+      180
+    ) ||
+    textAfterLabel(
+      fullText,
+      [
+        "Salary", "Salary Range", "Monthly Salary", "Compensation",
+        "Pay Range", "Base Salary",
+        "الراتب", "نطاق الراتب", "الراتب الشهري", "الأجر", "التعويض"
+      ],
+      180
+    );
+
+  if (labeled) return sanitizeSalaryField(labeled);
+
+  const text = clean(normalizeDigits(fullText));
+  const contextual = text.match(
+    /(?:الراتب|نطاق الراتب|الراتب الشهري|الأجر|salary|salary range|monthly salary|compensation|pay range)\s*:?\s*([^|]{1,160}?)(?=\s{2,}|(?:المؤهل|الخبرة|التخصص|location|education|experience|qualification|apply)\b|$)/i
+  );
+  if (contextual?.[1]) return sanitizeSalaryField(contextual[1]);
+
+  return null;
+}
+
+function sanitizeSpecializationField(value) {
+  const text = dedupeRepeatedFieldText(value);
+  if (!text || containsCookieNoise(text)) return null;
+  const cleaned = clean(text).slice(0, 180);
+  if (!cleaned) return null;
+  return cleaned;
+}
+
 function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
   const source = String(text ?? "");
   const lower = source.toLowerCase();
@@ -1376,13 +1443,42 @@ function extractDetail(html, source, url) {
     visibleFieldFromHtml(visibleHtml, ["Years of Experience", "Experience", "Minimum Experience", "الخبرة"], 450) ||
     extractSection(fullText, ["Years of Experience", "Minimum Experience", "Experience"], ["Nature of Experience", "Job Band", "Skills", "Education", "Apply now"], 450);
 
+  const specialization =
+    visibleFieldFromHtml(
+      visibleHtml,
+      ["Specialization", "Field of Study", "Major", "Discipline", "Academic Major", "التخصص", "التخصص المطلوب"],
+      180
+    ) ||
+    textAfterLabel(
+      fullText,
+      ["Specialization", "Field of Study", "Major", "Discipline", "Academic Major", "التخصص", "التخصص المطلوب"],
+      180
+    );
+
   const published =
     visibleFieldFromHtml(visibleHtml, ["Date", "Posting Date", "Date Posted", "تاريخ النشر"], 80) ||
     textAfterLabel(fullText, ["Posting Date", "Date Posted", "Date", "تاريخ النشر"], 80);
 
+  const expires =
+    visibleFieldFromHtml(
+      visibleHtml,
+      ["Closing Date", "Application Deadline", "Deadline", "Last Date to Apply", "آخر موعد للتقديم", "تاريخ الإغلاق", "نهاية التقديم"],
+      100
+    ) ||
+    textAfterLabel(
+      fullText,
+      ["Closing Date", "Application Deadline", "Deadline", "Last Date to Apply", "آخر موعد للتقديم", "تاريخ الإغلاق", "نهاية التقديم"],
+      100
+    );
+
+  const salary = extractSalaryFromDetail(visibleHtml, fullText);
   const description = extractDescription(visibleHtml);
   const city = normalizeCity(cityRaw);
-  const workMode = visibleFieldFromHtml(visibleHtml, ["Work Mode", "Work Arrangement", "نوع العمل"], 80);
+  const workMode = visibleFieldFromHtml(
+    visibleHtml,
+    ["Work Mode", "Work Arrangement", "Workplace Type", "Work Location Type", "نوع العمل", "نمط العمل"],
+    80
+  );
   const remote = explicitRemoteFlag({ title, city, workMode, description });
   const entry = inferEntryLevel({ title, description, experience });
 
@@ -1393,13 +1489,13 @@ function extractDetail(html, source, url) {
     sector: source.sector,
     city,
     region: null,
-    work_mode: remote ? "عن بُعد" : null,
+    work_mode: normalizeWorkMode(workMode, remote),
     qualification: sanitizeQualificationField(qualification),
-    specialization: null,
+    specialization: sanitizeSpecializationField(specialization),
     experience: sanitizeExperienceField(experience),
-    salary: null,
+    salary,
     published_at: parseDate(published),
-    expires_at: null,
+    expires_at: parseDate(expires),
     summary: clean(description) || null,
     source_url: url,
     apply_url: url,
@@ -3851,6 +3947,7 @@ function publicArabicJob(row) {
     qualification: arabicPublicText(sanitizeQualificationField(row.qualification), null, 260),
     specialization: arabicPublicText(row.specialization, null, 180),
     experience: arabicPublicText(sanitizeExperienceField(row.experience), null, 320),
+    salary: sanitizeSalaryField(row.salary),
     summary: arabicPublicText(
       containsCookieNoise(row.summary) ? null : row.summary,
       "فرصة وظيفية لدى " + company + ". راجع رابط التقديم للاطلاع على التفاصيل والمتطلبات.",
@@ -4501,15 +4598,21 @@ function telegramJobLine(job, index = null) {
   const lines = [];
   lines.push((index == null ? "" : String(index) + ") ") + clean(job.title));
   lines.push("🏢 " + clean(job.company));
-  if (clean(job.city)) lines.push("📍 " + clean(job.city));
+  if (clean(job.city) && clean(job.city) !== "السعودية") lines.push("📍 " + clean(job.city));
   if (clean(job.sector)) lines.push("🏷️ " + clean(job.sector));
+  if (clean(job.salary)) lines.push("💰 " + clean(job.salary));
+  if (clean(job.work_mode)) lines.push("🧭 " + clean(job.work_mode));
   return lines.join("\n");
 }
 
 function telegramChannelJobText(job) {
   const lines = ["💼 وظيفة جديدة | مَسعى", "", "المسمى: " + clean(job.title), "الجهة: " + clean(job.company)];
-  if (clean(job.city)) lines.push("المدينة: " + clean(job.city));
+  if (clean(job.city) && clean(job.city) !== "السعودية") lines.push("المدينة: " + clean(job.city));
   if (clean(job.sector)) lines.push("القطاع: " + clean(job.sector));
+  if (clean(job.salary)) lines.push("الراتب: " + clean(job.salary));
+  if (clean(job.work_mode)) lines.push("نمط العمل: " + clean(job.work_mode));
+  if (clean(job.qualification) && clean(job.qualification).length <= 140) lines.push("المؤهل: " + clean(job.qualification));
+  if (clean(job.experience) && clean(job.experience).length <= 140) lines.push("الخبرة: " + clean(job.experience));
   if (clean(job.expires_at)) lines.push("آخر موعد: " + clean(job.expires_at));
   lines.push("", "✅ متحقق من المصدر الرسمي");
   return lines.join("\n");
