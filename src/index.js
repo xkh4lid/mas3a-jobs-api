@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.29.0-telegram-job-card-png";
+const VERSION = "3.30.0-telegram-dm-job-cards";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -5011,23 +5011,21 @@ async function telegramSendLatestJobs(env, chatId, subscriber = null) {
     });
   }
 
-  const text = ["💼 أحدث الوظائف الموثوقة في مَسعى", ""].concat(
-    selected.map((job, index) => telegramJobLine(job, index + 1))
-  ).join("\n\n");
+  let sent = 0;
+  for (const job of selected) {
+    const result = await telegramSendChannelJob(env, chatId, job);
+    if (!result.ok) {
+      return {
+        ok: false,
+        sent,
+        status: result.status,
+        error: result.error || "telegram_job_card_send_failed"
+      };
+    }
+    sent += 1;
+  }
 
-  const buttons = selected.map((job, index) => {
-    const url = telegramJobApplyUrl(job);
-    return url ? [{ text: "التقديم " + String(index + 1), url }] : null;
-  }).filter(Boolean);
-
-  buttons.push([{ text: "🔎 جميع الوظائف", url: MASAA_SITE_URL }]);
-
-  return telegramApi(env, "sendMessage", {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: true,
-    reply_markup: { inline_keyboard: buttons }
-  });
+  return { ok: true, sent };
 }
 
 function telegramSettingsText(subscriber) {
@@ -5091,30 +5089,15 @@ async function telegramNotifySubscribers(env) {
 
     if (!matches.length) continue;
 
-    const text = ["🔔 وظائف جديدة من مَسعى", ""].concat(
-      matches.map((job, index) => telegramJobLine(job, index + 1))
-    ).concat(["", "يمكنك تعديل التنبيهات من /settings"]).join("\n\n");
-
-    const buttons = matches.map((job, index) => {
-      const url = telegramJobApplyUrl(job);
-      return url ? [{ text: "التقديم " + String(index + 1), url }] : null;
-    }).filter(Boolean);
-    buttons.push([{ text: "🔎 مَسعى وظائف", url: MASAA_SITE_URL }]);
-
-    const sentResult = await telegramApi(env, "sendMessage", {
-      chat_id: subscriber.chat_id,
-      text,
-      disable_web_page_preview: true,
-      reply_markup: { inline_keyboard: buttons }
-    });
-
-    if (!sentResult.ok) {
-      if (Number(sentResult.status) === 403) await telegramDisableAlerts(env, subscriber.chat_id);
-      continue;
+    for (const job of matches.reverse()) {
+      const sentResult = await telegramSendChannelJob(env, subscriber.chat_id, job);
+      if (!sentResult.ok) {
+        if (Number(sentResult.status) === 403) await telegramDisableAlerts(env, subscriber.chat_id);
+        break;
+      }
+      await telegramMarkDelivered(env, job.id, target);
+      sent += 1;
     }
-
-    for (const job of matches) await telegramMarkDelivered(env, job.id, target);
-    sent += 1;
   }
 
   return { ok: true, subscribers: subscribers.length, sent };
