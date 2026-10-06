@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.23.0-telegram-channel-link";
+const VERSION = "3.24.0-telegram-site-channel-link";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4478,6 +4478,62 @@ async function resolveTelegramChannelId(env) {
   return telegramGetMeta(env, "channel_id");
 }
 
+function isTelegramJoinUrl(value) {
+  try {
+    const url = new URL(clean(value));
+    return url.protocol === "https:" && ["t.me", "telegram.me", "www.telegram.me"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function resolveTelegramChannelUrl(env, { createIfMissing = true } = {}) {
+  const configured = clean(env.TELEGRAM_CHANNEL_URL || "");
+  if (isTelegramJoinUrl(configured)) return configured;
+
+  const stored = clean(await telegramGetMeta(env, "channel_url"));
+  if (isTelegramJoinUrl(stored)) return stored;
+
+  const username = clean(await telegramGetMeta(env, "channel_username")).replace(/^@/, "");
+  if (username) {
+    const publicUrl = "https://t.me/" + username;
+    await telegramSetMeta(env, "channel_url", publicUrl);
+    return publicUrl;
+  }
+
+  const channelId = await resolveTelegramChannelId(env);
+  if (!channelId) return "";
+
+  const chat = await telegramApi(env, "getChat", { chat_id: channelId });
+  const chatUsername = clean(chat.result?.username || "").replace(/^@/, "");
+  if (chat.ok && chatUsername) {
+    const publicUrl = "https://t.me/" + chatUsername;
+    await telegramSetMeta(env, "channel_username", chatUsername);
+    await telegramSetMeta(env, "channel_url", publicUrl);
+    return publicUrl;
+  }
+
+  const existingInvite = clean(chat.result?.invite_link || "");
+  if (chat.ok && isTelegramJoinUrl(existingInvite)) {
+    await telegramSetMeta(env, "channel_url", existingInvite);
+    return existingInvite;
+  }
+
+  if (!createIfMissing) return "";
+
+  const created = await telegramApi(env, "createChatInviteLink", {
+    chat_id: channelId,
+    name: "Masaa Website"
+  });
+  const inviteLink = clean(created.result?.invite_link || "");
+  if (created.ok && isTelegramJoinUrl(inviteLink)) {
+    await telegramSetMeta(env, "channel_url", inviteLink);
+    return inviteLink;
+  }
+
+  return "";
+}
+
 async function ensureTelegramWebhook(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, skipped: true, reason: "token_not_configured" };
 
@@ -4853,6 +4909,7 @@ async function handleTelegramWebhook(request, env) {
       await telegramSetMeta(env, "channel_id", String(channelPost.chat.id));
       await telegramSetMeta(env, "channel_title", clean(channelPost.chat.title || ""));
       await telegramSetMeta(env, "channel_username", clean(channelPost.chat.username || ""));
+      await telegramSetMeta(env, "channel_url", "");
     }
     return json({ ok: true, channel_connected: true }, env, 200, { "Cache-Control": "no-store" });
   }
@@ -4972,13 +5029,13 @@ async function handleRequest(request, env) {
     try {
       await ensureTelegramStorage(env);
       const channelId = await resolveTelegramChannelId(env);
-      const channelUsername = clean(await telegramGetMeta(env, "channel_username")).replace(/^@/, "");
+      const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: false });
       const subscriberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM telegram_subscribers WHERE alerts_enabled = 1").first();
       return json({
         ok: true,
         configured: Boolean(env.TELEGRAM_BOT_TOKEN),
         channel_connected: Boolean(channelId),
-        channel_public_url: channelUsername ? "https://t.me/" + channelUsername : null,
+        channel_link_ready: Boolean(channelUrl),
         alerts_enabled_count: Number(subscriberCount?.count || 0),
         webhook_path: TELEGRAM_WEBHOOK_PATH
       }, env, 200, { "Cache-Control": "no-store" });
@@ -4990,83 +5047,23 @@ async function handleRequest(request, env) {
   if (request.method === "GET" && path === "/telegram/channel") {
     try {
       await ensureTelegramStorage(env);
-      const channelUsername = clean(await telegramGetMeta(env, "channel_username")).replace(/^@/, "");
-      if (!channelUsername) {
-        return json({ ok: false, error: "Telegram channel does not have a public username yet" }, env, 404, { "Cache-Control": "no-store" });
+      const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: true });
+      if (!channelUrl) {
+        return json({
+          ok: false,
+          error: "Telegram channel link is not ready. Ensure the bot can invite users or set a public channel username."
+        }, env, 503, { "Cache-Control": "no-store" });
       }
       return new Response(null, {
         status: 302,
         headers: {
-          "Location": "https://t.me/" + channelUsername,
+          "Location": channelUrl,
           "Cache-Control": "public, max-age=300",
           ...securityHeaders()
         }
       });
     } catch (error) {
       return internalError(error, env);
-    }
-  }
-
-  if (!["GET", "POST"].includes(request.method)) {
-    return json(
-      { ok: false, error: "Method not allowed" },
-      env,
-      405,
-      { "Allow": "GET, POST, OPTIONS" }
-    );
-  }
-
-  const isPublicApiRead =
-    request.method === "GET" &&
-    (path === "/" ||
-      path === "/health" ||
-      path === "/jobs" ||
-      path.startsWith("/jobs/") ||
-      path === "/sources" ||
-      path === "/stats" ||
-      path === "/analytics/summary" ||
-      path === "/telegram/status" ||
-      path === "/telegram/channel" ||
-      path === "/sitemap");
-
-  if (isPublicApiRead) {
-    const allowed = await rateLimitAllowed(
-      env.API_RATE_LIMITER,
-      requestRateKey(request, "api")
-    );
-    if (!allowed) {
-      return json(
-        { ok: false, error: "Too many requests" },
-        env,
-        429,
-        { "Retry-After": "60" }
-      );
-    }
-  }
-
-  if (request.method === "POST" && (path === "/contact" || path === "/sync")) {
-    const allowed = await rateLimitAllowed(
-      env.WRITE_RATE_LIMITER,
-      requestRateKey(request, path === "/contact" ? "contact" : "sync"),
-      { failClosed: true }
-    );
-    if (!allowed) {
-      return json(
-        { ok: false, error: "Too many requests" },
-        env,
-        429,
-        { "Retry-After": "60" }
-      );
-    }
-  }
-
-  if (request.method === "POST" && path === "/analytics/event") {
-    const allowed = await rateLimitAllowed(
-      env.API_RATE_LIMITER,
-      requestRateKey(request, "analytics")
-    );
-    if (!allowed) {
-      return json({ ok: false, error: "Too many requests" }, env, 429, { "Retry-After": "60" });
     }
   }
 
