@@ -27,12 +27,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   raw_hash TEXT,
   updated_at TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_jobs_status_published
-ON jobs(status, published_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_jobs_source_external
-ON jobs(source_key, external_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status_published ON jobs(status, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_source_external ON jobs(source_key, external_id);
 
 CREATE TABLE IF NOT EXISTS sources (
   source_key TEXT PRIMARY KEY,
