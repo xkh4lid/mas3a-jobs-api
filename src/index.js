@@ -2449,7 +2449,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId };
+export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls };
 
 export default {
   async fetch(request, env) {
