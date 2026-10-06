@@ -143,6 +143,20 @@ const SUCCESSFACTORS_SOURCES = [
       "https://careers.sasref.com.sa/viewalljobs/",
       "https://careers.sasref.com.sa/go/All-Jobs-at-SASREF/2896901/"
     ]
+  },
+  {
+    key: "tasnee",
+    name: "Tasnee Careers",
+    company: "National Industrialization Company (Tasnee)",
+    companyAr: "التصنيع",
+    sector: "خاص",
+    host: "jobs.tasnee.com",
+    listingUrls: [
+      "https://jobs.tasnee.com/search/?q=&locationsearch=SA"
+    ],
+    searchUrls: [
+      "https://jobs.tasnee.com/search/?q=&locationsearch=SA"
+    ]
   }
 ];
 
@@ -237,7 +251,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.5.4";
+const VERSION = "3.6.0";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
