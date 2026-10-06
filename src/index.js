@@ -173,6 +173,34 @@ const MILITARY_NEWS_SOURCES = [
     articlePath: /\/MediaAffairs\/MONGNews\/\d+\/Pages\/[^?#]+\.aspx/i,
     applyHosts: ["jobs.sang.gov.sa", "jobs.sa"],
     keywords: ["القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "رتبة", "الالتحاق بالخدمة العسكرية"]
+  },
+  {
+    key: "spa-military",
+    name: "واس - إعلانات القبول العسكري",
+    company: "الجهات العسكرية السعودية",
+    sector: "عسكري",
+    host: "www.spa.gov.sa",
+    listingUrls: [
+      "https://www.spa.gov.sa/news/latest-news?page=1"
+    ],
+    articlePath: /^\/N\d+$/i,
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa"],
+    listingKeywords: [
+      "فتح باب", "القبول والتسجيل", "القبول الموحد", "التجنيد الموحد",
+      "استقبال طلبات", "بدء التقديم", "رتبة جندي", "رتبة جندي أول",
+      "رتبة وكيل رقيب", "دورة تأهيل الضباط"
+    ],
+    excludeKeywords: [
+      "نتائج", "المرشحين", "المرشحات", "القبول المبدئي",
+      "المقبولين", "المقبولات", "المقابلة", "المطابقة"
+    ],
+    keywords: [
+      "فتح باب", "القبول والتسجيل", "القبول الموحد", "التجنيد الموحد",
+      "استقبال طلبات", "بدء التقديم", "الالتحاق"
+    ],
+    allowEmptyListing: true,
+    rapid: true,
+    maxArticles: 4
   }
 ];
 
