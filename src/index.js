@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.19.0-telegram-start";
+const VERSION = "3.20.0-telegram-publishing-alerts";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4212,65 +4212,100 @@ async function marketingAnalyticsSummary(env, days = 30) {
 }
 
 
+
 const TELEGRAM_WEBHOOK_PATH = "/telegram/webhook";
 const MASAA_SITE_URL = "https://mas3a.pages.dev/";
+const TELEGRAM_CHANNEL_BATCH_SIZE = 3;
+const TELEGRAM_DM_BATCH_SIZE = 3;
 
 async function telegramDerivedWebhookSecret(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return "";
-  return (await sha256(`masaa:telegram:webhook:${env.TELEGRAM_BOT_TOKEN}`)).slice(0, 64);
+  return (await sha256("masaa:telegram:webhook:" + env.TELEGRAM_BOT_TOKEN)).slice(0, 64);
 }
 
 async function telegramApi(env, method, payload = {}) {
-  if (!env.TELEGRAM_BOT_TOKEN) {
-    return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
-  }
-
+  if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
   const response = await fetch(
-    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,
+    "https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/" + method,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }
   );
-
   let body = null;
   try { body = await response.json(); } catch {}
-
   if (!response.ok || body?.ok !== true) {
     console.error("mas3a_telegram_api_error", method, response.status, body?.description || "unknown");
     return { ok: false, status: response.status, error: body?.description || "Telegram API error" };
   }
-
   return { ok: true, result: body.result };
+}
+
+async function ensureTelegramStorage(env) {
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_subscribers (chat_id TEXT PRIMARY KEY, username TEXT, first_name TEXT, alerts_enabled INTEGER NOT NULL DEFAULT 0, alerts_since TEXT, city_filter TEXT, sector_filter TEXT, field_filter TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_job_delivery (job_id TEXT NOT NULL, target TEXT NOT NULL, delivered_at TEXT NOT NULL, PRIMARY KEY (job_id, target))").run();
+}
+
+async function telegramGetMeta(env, key) {
+  const row = await env.DB.prepare("SELECT value FROM telegram_meta WHERE key = ? LIMIT 1").bind(key).first();
+  return clean(row?.value || "");
+}
+
+async function telegramSetMeta(env, key, value) {
+  await env.DB.prepare("INSERT INTO telegram_meta (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
+    .bind(key, String(value ?? ""), nowIso()).run();
+}
+
+async function resolveTelegramChannelId(env) {
+  const configured = clean(env.TELEGRAM_CHANNEL_ID || "");
+  if (configured) return configured;
+  return telegramGetMeta(env, "channel_id");
 }
 
 async function ensureTelegramWebhook(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, skipped: true, reason: "token_not_configured" };
 
   const secretToken = await telegramDerivedWebhookSecret(env);
-  const webhookUrl = `https://mas3a-jobs-api.xn4wafc.workers.dev${TELEGRAM_WEBHOOK_PATH}`;
-
+  const webhookUrl = "https://mas3a-jobs-api.xn4wafc.workers.dev" + TELEGRAM_WEBHOOK_PATH;
+  const requiredUpdates = ["message", "channel_post"];
   const info = await telegramApi(env, "getWebhookInfo");
-  if (
-    info.ok &&
-    clean(info.result?.url) === webhookUrl &&
-    Number(info.result?.max_connections || 0) === 40
-  ) {
+  const currentUpdates = Array.isArray(info.result?.allowed_updates) ? info.result.allowed_updates : [];
+  const hasRequired = requiredUpdates.every((item) => currentUpdates.includes(item));
+
+  if (info.ok && clean(info.result?.url) === webhookUrl && Number(info.result?.max_connections || 0) === 40 && hasRequired) {
     return { ok: true, unchanged: true, url: webhookUrl };
   }
 
-  const setResult = await telegramApi(env, "setWebhook", {
+  const result = await telegramApi(env, "setWebhook", {
     url: webhookUrl,
     secret_token: secretToken,
-    allowed_updates: ["message"],
+    allowed_updates: requiredUpdates,
     drop_pending_updates: false,
     max_connections: 40
   });
+  return result.ok ? { ok: true, configured: true, url: webhookUrl } : result;
+}
 
-  return setResult.ok
-    ? { ok: true, configured: true, url: webhookUrl }
-    : setResult;
+async function ensureTelegramCommands(env) {
+  await ensureTelegramStorage(env);
+  if (await telegramGetMeta(env, "commands_v2")) return { ok: true, unchanged: true };
+  const result = await telegramApi(env, "setMyCommands", {
+    commands: [
+      { command: "start", description: "بدء استخدام بوت مَسعى" },
+      { command: "jobs", description: "عرض أحدث الوظائف" },
+      { command: "alerts", description: "تفعيل تنبيهات الوظائف" },
+      { command: "city", description: "اختيار مدينة التنبيهات" },
+      { command: "sector", description: "اختيار القطاع" },
+      { command: "field", description: "اختيار مجال وظيفي" },
+      { command: "settings", description: "عرض إعدادات التنبيهات" },
+      { command: "stopalerts", description: "إيقاف التنبيهات" },
+      { command: "help", description: "المساعدة" }
+    ]
+  });
+  if (result.ok) await telegramSetMeta(env, "commands_v2", "1");
+  return result;
 }
 
 function telegramStartText() {
@@ -4279,17 +4314,303 @@ function telegramStartText() {
     "",
     "نساعدك تتابع أحدث الفرص الوظيفية الموثوقة من مصادرها الرسمية.",
     "",
-    "🔎 تصفح الوظائف من مَسعى:",
-    MASAA_SITE_URL,
+    "💼 /jobs أحدث الوظائف",
+    "🔔 /alerts تفعيل التنبيهات",
+    "📍 /city الرياض لاختيار مدينة",
+    "🏷️ /sector خاص لاختيار القطاع",
+    "🎯 /field محاسبة لاختيار مجال",
+    "⚙️ /settings إعداداتك",
     "",
-    "قريبًا: تنبيهات وظائف حسب المجال والمدينة."
+    "🔎 تصفح جميع الوظائف:",
+    MASAA_SITE_URL
   ].join("\n");
 }
 
-async function handleTelegramWebhook(request, env) {
-  if (!env.TELEGRAM_BOT_TOKEN) {
-    return json({ ok: false, error: "Telegram bot is not configured" }, env, 503);
+async function telegramUpsertSubscriber(env, message) {
+  if (message?.chat?.type !== "private" || !message?.chat?.id) return;
+  const now = nowIso();
+  await env.DB.prepare("INSERT INTO telegram_subscribers (chat_id, username, first_name, alerts_enabled, alerts_since, city_filter, sector_filter, field_filter, created_at, updated_at) VALUES (?, ?, ?, 0, NULL, NULL, NULL, NULL, ?, ?) ON CONFLICT(chat_id) DO UPDATE SET username = excluded.username, first_name = excluded.first_name, updated_at = excluded.updated_at")
+    .bind(
+      String(message.chat.id),
+      clean(message.from?.username || "").slice(0, 80) || null,
+      clean(message.from?.first_name || "").slice(0, 120) || null,
+      now,
+      now
+    ).run();
+}
+
+async function telegramGetSubscriber(env, chatId) {
+  return env.DB.prepare("SELECT chat_id, username, first_name, alerts_enabled, alerts_since, city_filter, sector_filter, field_filter FROM telegram_subscribers WHERE chat_id = ? LIMIT 1")
+    .bind(String(chatId)).first();
+}
+
+function telegramNormalizeFilter(value) {
+  return clean(value).replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").toLowerCase();
+}
+
+function telegramSubscriberMatchesJob(subscriber, job) {
+  if (!subscriber || !job) return false;
+
+  const cityFilter = telegramNormalizeFilter(subscriber.city_filter);
+  if (cityFilter) {
+    const cityText = telegramNormalizeFilter([job.city, job.region].filter(Boolean).join(" "));
+    if (!cityText.includes(cityFilter)) return false;
   }
+
+  const sectorFilter = clean(subscriber.sector_filter);
+  if (sectorFilter && clean(job.sector) !== sectorFilter) return false;
+
+  const fieldFilter = telegramNormalizeFilter(subscriber.field_filter);
+  if (fieldFilter) {
+    const haystack = telegramNormalizeFilter([job.title, job.specialization, job.summary, job.company].filter(Boolean).join(" "));
+    if (!haystack.includes(fieldFilter)) return false;
+  }
+
+  return true;
+}
+
+async function telegramLatestVerifiedJobs(env, limit = 60) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 60, 1), 120);
+  const sql = "SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, updated_at, status FROM jobs WHERE status = 'verified' AND NOT (source_key = 'sang-military' AND (apply_url IS NULL OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%'))) ORDER BY CASE WHEN published_at IS NULL THEN 1 ELSE 0 END, published_at DESC, discovered_at DESC, updated_at DESC LIMIT ?";
+  const result = await env.DB.prepare(sql).bind(safeLimit).all();
+  return (result.results || []).filter(isPublicJobReady).map(publicArabicJob);
+}
+
+function telegramJobApplyUrl(job) {
+  return clean(job?.apply_url || job?.source_url || "");
+}
+
+function telegramJobLine(job, index = null) {
+  const lines = [];
+  lines.push((index == null ? "" : String(index) + ") ") + clean(job.title));
+  lines.push("🏢 " + clean(job.company));
+  if (clean(job.city)) lines.push("📍 " + clean(job.city));
+  if (clean(job.sector)) lines.push("🏷️ " + clean(job.sector));
+  return lines.join("\n");
+}
+
+function telegramChannelJobText(job) {
+  const lines = ["💼 وظيفة جديدة | مَسعى", "", "المسمى: " + clean(job.title), "الجهة: " + clean(job.company)];
+  if (clean(job.city)) lines.push("المدينة: " + clean(job.city));
+  if (clean(job.sector)) lines.push("القطاع: " + clean(job.sector));
+  if (clean(job.expires_at)) lines.push("آخر موعد: " + clean(job.expires_at));
+  lines.push("", "✅ متحقق من المصدر الرسمي");
+  return lines.join("\n");
+}
+
+async function telegramDeliveryExists(env, jobId, target) {
+  const row = await env.DB.prepare("SELECT 1 AS found FROM telegram_job_delivery WHERE job_id = ? AND target = ? LIMIT 1")
+    .bind(String(jobId), String(target)).first();
+  return Boolean(row?.found);
+}
+
+async function telegramMarkDelivered(env, jobId, target) {
+  await env.DB.prepare("INSERT OR IGNORE INTO telegram_job_delivery (job_id, target, delivered_at) VALUES (?, ?, ?)")
+    .bind(String(jobId), String(target), nowIso()).run();
+}
+
+async function telegramSendChannelJob(env, channelId, job) {
+  const applyUrl = telegramJobApplyUrl(job);
+  const buttons = [];
+  if (applyUrl) buttons.push([{ text: "✅ التقديم من المصدر الرسمي", url: applyUrl }]);
+  buttons.push([{ text: "🔎 مَسعى وظائف", url: MASAA_SITE_URL }]);
+  return telegramApi(env, "sendMessage", {
+    chat_id: channelId,
+    text: telegramChannelJobText(job),
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: buttons }
+  });
+}
+
+async function telegramBootstrapChannel(env, channelId) {
+  const key = "channel_bootstrap:" + channelId;
+  if (await telegramGetMeta(env, key)) return { ok: true, already_bootstrapped: true };
+
+  const jobs = await telegramLatestVerifiedJobs(env, 100);
+  if (!jobs.length) {
+    await telegramSetMeta(env, key, "done");
+    return { ok: true, published: 0 };
+  }
+
+  const target = "channel:" + channelId;
+  const initial = jobs.slice(0, TELEGRAM_CHANNEL_BATCH_SIZE).reverse();
+  let published = 0;
+
+  for (const job of initial) {
+    if (await telegramDeliveryExists(env, job.id, target)) continue;
+    const sent = await telegramSendChannelJob(env, channelId, job);
+    if (!sent.ok) return { ok: false, published, error: sent.error };
+    await telegramMarkDelivered(env, job.id, target);
+    published += 1;
+  }
+
+  for (const job of jobs.slice(TELEGRAM_CHANNEL_BATCH_SIZE)) {
+    await telegramMarkDelivered(env, job.id, target);
+  }
+
+  await telegramSetMeta(env, key, "done");
+  return { ok: true, published };
+}
+
+async function telegramPublishChannelUpdates(env) {
+  const channelId = await resolveTelegramChannelId(env);
+  if (!channelId) return { ok: true, skipped: true, reason: "channel_not_connected" };
+
+  const bootstrap = await telegramBootstrapChannel(env, channelId);
+  if (!bootstrap.ok || !bootstrap.already_bootstrapped) return bootstrap;
+
+  const target = "channel:" + channelId;
+  const jobs = await telegramLatestVerifiedJobs(env, 40);
+  const pending = [];
+
+  for (const job of jobs) {
+    if (!(await telegramDeliveryExists(env, job.id, target))) pending.push(job);
+    if (pending.length >= TELEGRAM_CHANNEL_BATCH_SIZE) break;
+  }
+
+  let published = 0;
+  for (const job of pending.reverse()) {
+    const sent = await telegramSendChannelJob(env, channelId, job);
+    if (!sent.ok) return { ok: false, published, error: sent.error };
+    await telegramMarkDelivered(env, job.id, target);
+    published += 1;
+  }
+
+  return { ok: true, published };
+}
+
+async function telegramSendLatestJobs(env, chatId, subscriber = null) {
+  const jobs = await telegramLatestVerifiedJobs(env, 40);
+  const filtered = subscriber ? jobs.filter((job) => telegramSubscriberMatchesJob(subscriber, job)) : jobs;
+  const selected = filtered.slice(0, 5);
+
+  if (!selected.length) {
+    return telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: "ما لقيت وظائف مطابقة لإعداداتك حاليًا. جرّب تغيير الفلاتر من /settings.",
+      reply_markup: { inline_keyboard: [[{ text: "🔎 تصفح مَسعى", url: MASAA_SITE_URL }]] }
+    });
+  }
+
+  const text = ["💼 أحدث الوظائف الموثوقة في مَسعى", ""].concat(
+    selected.map((job, index) => telegramJobLine(job, index + 1))
+  ).join("\n\n");
+
+  const buttons = selected.map((job, index) => {
+    const url = telegramJobApplyUrl(job);
+    return url ? [{ text: "التقديم " + String(index + 1), url }] : null;
+  }).filter(Boolean);
+
+  buttons.push([{ text: "🔎 جميع الوظائف", url: MASAA_SITE_URL }]);
+
+  return telegramApi(env, "sendMessage", {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: buttons }
+  });
+}
+
+function telegramSettingsText(subscriber) {
+  const enabled = Number(subscriber?.alerts_enabled || 0) === 1;
+  return [
+    "⚙️ إعدادات تنبيهات مَسعى",
+    "",
+    "التنبيهات: " + (enabled ? "✅ مفعلة" : "⛔️ متوقفة"),
+    "المدينة: " + (clean(subscriber?.city_filter) || "الكل"),
+    "القطاع: " + (clean(subscriber?.sector_filter) || "الكل"),
+    "المجال: " + (clean(subscriber?.field_filter) || "الكل"),
+    "",
+    "أمثلة:",
+    "/city الرياض",
+    "/sector حكومي",
+    "/field محاسبة",
+    "",
+    "لإلغاء فلتر استخدم كلمة الكل."
+  ].join("\n");
+}
+
+async function telegramEnableAlerts(env, chatId) {
+  const now = nowIso();
+  await env.DB.prepare("UPDATE telegram_subscribers SET alerts_enabled = 1, alerts_since = CASE WHEN alerts_enabled = 1 AND alerts_since IS NOT NULL THEN alerts_since ELSE ? END, updated_at = ? WHERE chat_id = ?")
+    .bind(now, now, String(chatId)).run();
+}
+
+async function telegramDisableAlerts(env, chatId) {
+  await env.DB.prepare("UPDATE telegram_subscribers SET alerts_enabled = 0, updated_at = ? WHERE chat_id = ?")
+    .bind(nowIso(), String(chatId)).run();
+}
+
+async function telegramSetSubscriberFilter(env, chatId, column, value) {
+  const allowed = new Set(["city_filter", "sector_filter", "field_filter"]);
+  if (!allowed.has(column)) throw new Error("Invalid Telegram filter column");
+  await env.DB.prepare("UPDATE telegram_subscribers SET " + column + " = ?, updated_at = ? WHERE chat_id = ?")
+    .bind(value || null, nowIso(), String(chatId)).run();
+}
+
+async function telegramNotifySubscribers(env) {
+  const result = await env.DB.prepare("SELECT chat_id, username, first_name, alerts_enabled, alerts_since, city_filter, sector_filter, field_filter FROM telegram_subscribers WHERE alerts_enabled = 1 ORDER BY updated_at DESC LIMIT 1000").all();
+  const subscribers = result.results || [];
+  if (!subscribers.length) return { ok: true, subscribers: 0, sent: 0 };
+
+  const jobs = await telegramLatestVerifiedJobs(env, 50);
+  let sent = 0;
+
+  for (const subscriber of subscribers) {
+    const sinceMs = Date.parse(subscriber.alerts_since || "") || Date.now();
+    const target = "dm:" + subscriber.chat_id;
+    const matches = [];
+
+    for (const job of jobs) {
+      const jobTime = Date.parse(job.discovered_at || job.updated_at || job.published_at || "") || 0;
+      if (jobTime < sinceMs) continue;
+      if (!telegramSubscriberMatchesJob(subscriber, job)) continue;
+      if (await telegramDeliveryExists(env, job.id, target)) continue;
+      matches.push(job);
+      if (matches.length >= TELEGRAM_DM_BATCH_SIZE) break;
+    }
+
+    if (!matches.length) continue;
+
+    const text = ["🔔 وظائف جديدة من مَسعى", ""].concat(
+      matches.map((job, index) => telegramJobLine(job, index + 1))
+    ).concat(["", "يمكنك تعديل التنبيهات من /settings"]).join("\n\n");
+
+    const buttons = matches.map((job, index) => {
+      const url = telegramJobApplyUrl(job);
+      return url ? [{ text: "التقديم " + String(index + 1), url }] : null;
+    }).filter(Boolean);
+    buttons.push([{ text: "🔎 مَسعى وظائف", url: MASAA_SITE_URL }]);
+
+    const sentResult = await telegramApi(env, "sendMessage", {
+      chat_id: subscriber.chat_id,
+      text,
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: buttons }
+    });
+
+    if (!sentResult.ok) {
+      if (Number(sentResult.status) === 403) await telegramDisableAlerts(env, subscriber.chat_id);
+      continue;
+    }
+
+    for (const job of matches) await telegramMarkDelivered(env, job.id, target);
+    sent += 1;
+  }
+
+  return { ok: true, subscribers: subscribers.length, sent };
+}
+
+async function publishTelegramUpdates(env) {
+  if (!env.TELEGRAM_BOT_TOKEN) return { ok: true, skipped: true, reason: "token_not_configured" };
+  await ensureTelegramStorage(env);
+  const channel = await telegramPublishChannelUpdates(env);
+  const subscribers = await telegramNotifySubscribers(env);
+  return { ok: channel.ok !== false && subscribers.ok !== false, channel, subscribers };
+}
+
+async function handleTelegramWebhook(request, env) {
+  if (!env.TELEGRAM_BOT_TOKEN) return json({ ok: false, error: "Telegram bot is not configured" }, env, 503);
 
   const expectedSecret = await telegramDerivedWebhookSecret(env);
   const receivedSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
@@ -4298,47 +4619,117 @@ async function handleTelegramWebhook(request, env) {
   }
 
   const declaredLength = Number(request.headers.get("Content-Length") || 0);
-  if (declaredLength > 131072) {
-    return json({ ok: false, error: "Payload too large" }, env, 413, { "Cache-Control": "no-store" });
-  }
+  if (declaredLength > 131072) return json({ ok: false, error: "Payload too large" }, env, 413);
 
   let update = null;
-  try {
-    update = await request.json();
-  } catch {
-    return json({ ok: false, error: "Invalid JSON" }, env, 400, { "Cache-Control": "no-store" });
+  try { update = await request.json(); }
+  catch { return json({ ok: false, error: "Invalid JSON" }, env, 400); }
+
+  await ensureTelegramStorage(env);
+
+  const channelPost = update?.channel_post;
+  if (channelPost?.chat?.id) {
+    if (!clean(env.TELEGRAM_CHANNEL_ID || "")) {
+      await telegramSetMeta(env, "channel_id", String(channelPost.chat.id));
+      await telegramSetMeta(env, "channel_title", clean(channelPost.chat.title || ""));
+      await telegramSetMeta(env, "channel_username", clean(channelPost.chat.username || ""));
+    }
+    return json({ ok: true, channel_connected: true }, env, 200, { "Cache-Control": "no-store" });
   }
 
   const message = update?.message;
   const chatId = message?.chat?.id;
   const text = clean(message?.text || "");
-  if (!chatId || !text) {
-    return json({ ok: true, ignored: true }, env, 200, { "Cache-Control": "no-store" });
-  }
+  if (!chatId || !text) return json({ ok: true, ignored: true }, env, 200);
 
-  const command = text.split(/\s+/)[0].split("@")[0].toLowerCase();
+  if (message?.chat?.type === "private") await telegramUpsertSubscriber(env, message);
+
+  const parts = text.split(/\s+/);
+  const command = (parts.shift() || "").split("@")[0].toLowerCase();
+  const argument = clean(parts.join(" "));
 
   if (command === "/start" || command === "/help") {
     const sent = await telegramApi(env, "sendMessage", {
       chat_id: chatId,
       text: telegramStartText(),
       disable_web_page_preview: true,
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "💼 تصفح الوظائف", url: MASAA_SITE_URL }
-        ]]
-      }
+      reply_markup: { inline_keyboard: [[{ text: "💼 تصفح الوظائف", url: MASAA_SITE_URL }]] }
     });
-
-    return json(
-      sent.ok ? { ok: true } : { ok: false, error: "Telegram send failed" },
-      env,
-      sent.ok ? 200 : 502,
-      { "Cache-Control": "no-store" }
-    );
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
   }
 
-  return json({ ok: true, ignored: true }, env, 200, { "Cache-Control": "no-store" });
+  if (message?.chat?.type !== "private") return json({ ok: true, ignored: true }, env, 200);
+
+  if (command === "/jobs") {
+    const subscriber = await telegramGetSubscriber(env, chatId);
+    const sent = await telegramSendLatestJobs(env, chatId, subscriber);
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  if (command === "/alerts") {
+    await telegramEnableAlerts(env, chatId);
+    const subscriber = await telegramGetSubscriber(env, chatId);
+    const sent = await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: "🔔 تم تفعيل تنبيهات الوظائف.\n\nلن أعيد إرسال نفس الوظيفة.\n\n" + telegramSettingsText(subscriber)
+    });
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  if (command === "/stopalerts") {
+    await telegramDisableAlerts(env, chatId);
+    const sent = await telegramApi(env, "sendMessage", {
+      chat_id: chatId,
+      text: "تم إيقاف التنبيهات. تقدر تشغلها من جديد عبر /alerts."
+    });
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  if (command === "/settings") {
+    const subscriber = await telegramGetSubscriber(env, chatId);
+    const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: telegramSettingsText(subscriber) });
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  if (command === "/city") {
+    if (!argument) {
+      const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: "مثال: /city الرياض\nولإلغاء الفلتر: /city الكل" });
+      return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+    }
+    const value = ["الكل", "كل", "all"].includes(argument.toLowerCase()) ? null : argument.slice(0, 80);
+    await telegramSetSubscriberFilter(env, chatId, "city_filter", value);
+    const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: value ? "📍 المدينة: " + value : "📍 تم إلغاء فلتر المدينة." });
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  if (command === "/sector") {
+    if (!argument) {
+      const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: "استخدم: /sector خاص أو حكومي أو عسكري\nولإلغاء الفلتر: /sector الكل" });
+      return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+    }
+    const value = ["الكل", "كل", "all"].includes(argument.toLowerCase()) ? null : argument.slice(0, 40);
+    if (value && !["خاص", "حكومي", "عسكري"].includes(value)) {
+      const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: "القطاعات المتاحة: خاص، حكومي، عسكري." });
+      return json({ ok: sent.ok }, env, 400);
+    }
+    await telegramSetSubscriberFilter(env, chatId, "sector_filter", value);
+    const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: value ? "🏷️ القطاع: " + value : "🏷️ تم إلغاء فلتر القطاع." });
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  if (command === "/field") {
+    if (!argument) {
+      const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: "مثال: /field محاسبة\nولإلغاء الفلتر: /field الكل" });
+      return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+    }
+    const value = ["الكل", "كل", "all"].includes(argument.toLowerCase()) ? null : argument.slice(0, 100);
+    await telegramSetSubscriberFilter(env, chatId, "field_filter", value);
+    const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: value ? "🎯 المجال: " + value : "🎯 تم إلغاء فلتر المجال." });
+    return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
+  }
+
+  const sent = await telegramApi(env, "sendMessage", { chat_id: chatId, text: "استخدم /help لعرض الأوامر المتاحة." });
+  return json({ ok: sent.ok }, env, sent.ok ? 200 : 502);
 }
 
 async function handleRequest(request, env) {
@@ -4358,11 +4749,20 @@ async function handleRequest(request, env) {
   }
 
   if (request.method === "GET" && path === "/telegram/status") {
-    return json({
-      ok: true,
-      configured: Boolean(env.TELEGRAM_BOT_TOKEN),
-      webhook_path: TELEGRAM_WEBHOOK_PATH
-    }, env, 200, { "Cache-Control": "no-store" });
+    try {
+      await ensureTelegramStorage(env);
+      const channelId = await resolveTelegramChannelId(env);
+      const subscriberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM telegram_subscribers WHERE alerts_enabled = 1").first();
+      return json({
+        ok: true,
+        configured: Boolean(env.TELEGRAM_BOT_TOKEN),
+        channel_connected: Boolean(channelId),
+        alerts_enabled_count: Number(subscriberCount?.count || 0),
+        webhook_path: TELEGRAM_WEBHOOK_PATH
+      }, env, 200, { "Cache-Control": "no-store" });
+    } catch (error) {
+      return internalError(error, env);
+    }
   }
 
   if (!["GET", "POST"].includes(request.method)) {
@@ -4540,6 +4940,8 @@ export default {
   async scheduled(controller, env, ctx) {
     ctx.waitUntil((async () => {
       await ensureTelegramWebhook(env);
+      await ensureTelegramCommands(env);
+      await publishTelegramUpdates(env);
       const totalJobs = await verifiedJobCount(env);
 
       if (totalJobs < CATCHUP_TARGET_JOBS) {
