@@ -829,14 +829,26 @@ function validateJobCandidate(source, job) {
 function discoverArticleUrls(html, source, baseUrl) {
   const normalized = normalizeListingHtml(html);
   const found = new Set();
-  const hrefRegex = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>/gi;
+  const hrefRegex = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
 
   while ((match = hrefRegex.exec(normalized))) {
     const url = absoluteUrl(match[1], baseUrl);
+    const anchorText = stripHtml(match[2] || "");
+
+    if (Array.isArray(source.listingKeywords) && source.listingKeywords.length > 0) {
+      const hasListingSignal = source.listingKeywords.some((keyword) => anchorText.includes(keyword));
+      if (!hasListingSignal) continue;
+    }
+
+    if (Array.isArray(source.excludeKeywords) && source.excludeKeywords.some((keyword) => anchorText.includes(keyword))) {
+      continue;
+    }
+
     try {
       const parsed = new URL(url);
       if (parsed.hostname !== source.host) continue;
+      source.articlePath.lastIndex = 0;
       if (!source.articlePath.test(parsed.pathname)) continue;
       found.add(parsed.href);
     } catch {
