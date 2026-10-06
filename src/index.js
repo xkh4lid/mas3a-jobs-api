@@ -1,6 +1,3 @@
-import { initWasm, Resvg } from "@resvg/resvg-wasm";
-import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
-
 const SUCCESSFACTORS_SOURCES = [
   {
     key: "stc",
@@ -4826,8 +4823,6 @@ function bytesToBase64(bytes) {
 }
 
 let telegramCardFontPromise = null;
-let telegramResvgInitPromise = null;
-
 async function telegramCardFontBytes() {
   if (!telegramCardFontPromise) {
     telegramCardFontPromise = (async () => {
@@ -4844,16 +4839,6 @@ async function telegramCardFontBytes() {
     });
   }
   return telegramCardFontPromise;
-}
-
-async function ensureTelegramResvg() {
-  if (!telegramResvgInitPromise) {
-    telegramResvgInitPromise = initWasm(resvgWasm).catch((error) => {
-      telegramResvgInitPromise = null;
-      throw error;
-    });
-  }
-  return telegramResvgInitPromise;
 }
 
 async function telegramCompanyLogoDataUri(job) {
@@ -4909,18 +4894,9 @@ async function telegramJobCardPng(job) {
     telegramCardFontBytes(),
     telegramCompanyLogoDataUri(job)
   ]);
-  await ensureTelegramResvg();
   const svg = telegramJobCardSvg(job, logoDataUri);
-  const renderer = new Resvg(svg, {
-    fitTo: { mode: "width", value: 1200 },
-    font: {
-      fontBuffers: [fontBytes],
-      defaultFontFamily: "Noto Kufi Arabic"
-    }
-  });
-  const png = renderer.render().asPng();
-  if (!(png instanceof Uint8Array) || png.byteLength < 1000) throw new Error("telegram_card_png_invalid");
-  return png;
+  const { renderTelegramJobCardPng } = await import("./telegram-card-renderer.js");
+  return renderTelegramJobCardPng(svg, fontBytes);
 }
 
 function telegramJobCardUrl(env, job) {
