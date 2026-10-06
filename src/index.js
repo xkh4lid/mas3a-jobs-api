@@ -31,7 +31,8 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.saudia.com",
     listingUrls: [
-      "https://careers.saudia.com/viewalljobs/?locale=ar_SA"
+      "https://careers.saudia.com/viewalljobs/?locale=ar_SA",
+      "https://careers.saudia.com/viewalljobs/?locale=en_US"
     ]
   },
   {
@@ -53,7 +54,8 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.acwapower.com",
     listingUrls: [
-      "https://careers.acwapower.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.acwapower.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
+      "https://careers.acwapower.com/viewalljobs/?locale=en_US"
     ]
   },
   {
@@ -64,7 +66,8 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.spimaco.com.sa",
     listingUrls: [
-      "https://careers.spimaco.com.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.spimaco.com.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
+      "https://careers.spimaco.com.sa/viewalljobs/?locale=en_US"
     ]
   },
   {
@@ -75,7 +78,8 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.sab.com",
     listingUrls: [
-      "https://careers.sab.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.sab.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
+      "https://careers.sab.com/viewalljobs/?locale=en_US"
     ]
   },
   {
@@ -193,7 +197,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.1.0";
+const VERSION = "3.2.0";
 const LOCALIZATION_VERSION = "ar-v3";
 const nowIso = () => new Date().toISOString();
 
@@ -236,6 +240,33 @@ const absoluteUrl = (href, base) => {
     return "";
   }
 };
+
+function officialHostsForSource(source) {
+  const hosts = new Set([source.host, ...(source.applyHosts || [])].filter(Boolean).map((h) => String(h).toLowerCase()));
+  for (const candidate of [...(source.listingUrls || []), source.url].filter(Boolean)) {
+    try { hosts.add(new URL(candidate).hostname.toLowerCase()); } catch {}
+  }
+  return hosts;
+}
+
+function isAllowedOfficialUrl(value, source) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return [...officialHostsForSource(source)].some((allowed) => host === allowed || host.endsWith("." + allowed));
+  } catch {
+    return false;
+  }
+}
+
+function stableTextId(prefix, value) {
+  const normalized = normalizeDigits(clean(value)).toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06ff]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return normalized ? `${prefix}-${normalized}` : null;
+}
 
 const sha256 = async (value) => {
   const digest = await crypto.subtle.digest(
@@ -663,7 +694,7 @@ async function syncPortalMonitorSource(env, source) {
     const response = await fetch(source.url, {
       method: "GET",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.1; +https://mas3a.pages.dev)",
+        "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2; +https://mas3a.pages.dev)",
         Accept: "text/html,application/xhtml+xml"
       },
       redirect: "follow",
@@ -717,7 +748,7 @@ function extractMohCurrentJobs(html, source) {
   return {
     parsed: true,
     jobs: titles.slice(0, 20).map((title, index) => ({
-      external_id: `moh-current-${index + 1}`,
+      external_id: stableTextId("moh-current", title) || `moh-current-${index + 1}`,
       title,
       company: source.company,
       sector: "حكومي",
@@ -759,7 +790,7 @@ async function syncOfficialListingSource(env, source) {
       if (result.added) added += 1;
       if (result.updated) updated += 1;
     }
-    await archiveMissingJobs(env, source.key, seen);
+    await archiveMissingJobs(env, source.key, seen, extracted.jobs.length === 0 && pageExplicitlyHasNoJobs(html));
     await upsertSource(env, source, { success: true, jobsSeen: extracted.jobs.length, newJobs: added, status: "ok" }, source.sourceType || "official_listing");
     return { source: source.key, jobsSeen: extracted.jobs.length, added, updated, errors: 0 };
   } catch (error) {
@@ -772,7 +803,7 @@ async function syncOfficialListingSource(env, source) {
 async function fetchText(url) {
   const response = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.1; +https://mas3a.pages.dev)",
+      "User-Agent": "Mozilla/5.0 (compatible; MasaaJobsBot/3.2; +https://mas3a.pages.dev)",
       Accept: "text/html,application/xhtml+xml"
     },
     redirect: "follow",
@@ -950,8 +981,14 @@ async function dedupeExistingJobs(env) {
 }
 
 async function saveJob(env, source, rawJob) {
-  if (!rawJob.title || !rawJob.apply_url) {
-    return { added: false, updated: false };
+  if (!rawJob.title || !rawJob.apply_url || !rawJob.source_url) {
+    return { added: false, updated: false, rejected: "missing_required_fields" };
+  }
+
+  // Never publish a URL that is not HTTPS and owned by the configured official source.
+  // Redirect/cross-domain application hosts must be explicitly allow-listed on the source.
+  if (!isAllowedOfficialUrl(rawJob.source_url, source) || !isAllowedOfficialUrl(rawJob.apply_url, source)) {
+    return { added: false, updated: false, rejected: "untrusted_source_url" };
   }
 
   const stableKey = rawJob.external_id || rawJob.apply_url;
@@ -1120,8 +1157,11 @@ async function saveJob(env, source, rawJob) {
   return { added: false, updated: true };
 }
 
-async function archiveMissingJobs(env, sourceKey, seenExternalIds) {
+async function archiveMissingJobs(env, sourceKey, seenExternalIds, confirmedEmpty = false) {
+  // An empty parser result is not proof that every vacancy closed. Only archive all
+  // when the official page explicitly states there are no open jobs.
   if (!seenExternalIds.length) {
+    if (!confirmedEmpty) return;
     await env.DB.prepare(
       `UPDATE jobs SET status = 'expired', updated_at = ? WHERE source_key = ? AND status = 'verified'`
     )
@@ -1255,7 +1295,7 @@ async function syncSuccessFactorsSource(env, source) {
 
   // لا نؤرشف وظائف لمجرد أننا وصلنا إلى حد المعالجة في مصدر كبير.
   if (detailErrors === 0 && processedUrls.length === allUrls.length) {
-    await archiveMissingJobs(env, source.key, seenExternalIds);
+    await archiveMissingJobs(env, source.key, seenExternalIds, urls.size === 0 && explicitNoJobs);
   }
 
   await upsertSource(env, source, {
@@ -1793,3 +1833,5 @@ export default {
     ctx.waitUntil(runSync(env));
   }
 };
+
+export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId };
