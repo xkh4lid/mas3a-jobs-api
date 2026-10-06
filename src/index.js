@@ -497,6 +497,19 @@ function configuredSourceHosts(source) {
   return { sourceHosts, applyHosts: new Set([...applyHosts].map((host) => host.toLowerCase())) };
 }
 
+function isAllowedOfficialUrl(value, source) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    const { sourceHosts, applyHosts } = configuredSourceHosts(source || {});
+    const allowedHosts = new Set([...sourceHosts, ...applyHosts]);
+    return [...allowedHosts].some((allowed) => host === allowed || host.endsWith("." + allowed));
+  } catch {
+    return false;
+  }
+}
+
 function validateJobCandidate(source, job) {
   const title = clean(job?.title);
   if (title.length < 3 || title.length > 220) return { ok: false, reason: "invalid_title" };
@@ -894,14 +907,17 @@ async function syncPortalMonitorSource(env, source) {
   }
 }
 
-function stableTextId(value) {
+function stableTextId(prefixOrValue, maybeValue) {
+  const hasPrefix = maybeValue !== undefined;
+  const value = hasPrefix ? maybeValue : prefixOrValue;
   const normalized = clean(value).toLowerCase().normalize("NFKC");
   let hash = 2166136261;
   for (let i = 0; i < normalized.length; i += 1) {
     hash ^= normalized.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
-  return (hash >>> 0).toString(36);
+  const id = (hash >>> 0).toString(36);
+  return hasPrefix ? `${clean(prefixOrValue)}-${id}` : id;
 }
 
 function extractMohCurrentJobs(html, source) {
@@ -2368,6 +2384,8 @@ async function handleRequest(request, env) {
 
   return json({ ok: false, error: "Not found" }, env, 404);
 }
+
+export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId };
 
 export default {
   async fetch(request, env) {
