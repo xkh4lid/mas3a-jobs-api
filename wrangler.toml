@@ -11,7 +11,7 @@ name = "API_RATE_LIMITER"
 namespace_id = "93015401"
 
   [ratelimits.simple]
-  limit = 180
+  limit = 120
   period = 60
 
 [[ratelimits]]
@@ -19,7 +19,7 @@ name = "WRITE_RATE_LIMITER"
 namespace_id = "93015402"
 
   [ratelimits.simple]
-  limit = 10
+  limit = 5
   period = 60
 
 [[d1_databases]]
