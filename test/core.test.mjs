@@ -7,7 +7,8 @@ import {
   normalizeDigits,
   parseDate,
   isAllowedOfficialUrl,
-  stableTextId
+  stableTextId,
+  successFactorsSearchUrls
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -40,4 +41,18 @@ test("rejects non-HTTPS and non-official application URLs", () => {
 test("creates stable IDs for title-based official listings", () => {
   assert.equal(stableTextId("moh-current", "إعلان طبي ١"), stableTextId("moh-current", "إعلان طبي ١"));
   assert.notEqual(stableTextId("moh-current", "إعلان طبي ١"), stableTextId("moh-current", "إعلان طبي ٢"));
+});
+
+
+test("keeps explicitly scoped official search URLs without broadening globally", () => {
+  const source = {
+    host: "careers.example.sa",
+    listingUrls: ["https://careers.example.sa/viewalljobs/"],
+    searchUrls: ["https://careers.example.sa/search/?q=&locationsearch=SA"]
+  };
+
+  assert.deepEqual(
+    successFactorsSearchUrls(source),
+    ["https://careers.example.sa/search/?q=&locationsearch=SA"]
+  );
 });
