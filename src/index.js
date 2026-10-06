@@ -54,6 +54,7 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.acwapower.com",
     listingUrls: [
+      "https://careers.acwapower.com/viewalljobs/",
       "https://careers.acwapower.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
       "https://careers.acwapower.com/viewalljobs/?locale=en_US"
     ]
@@ -66,6 +67,8 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.spimaco.com.sa",
     listingUrls: [
+      "https://careers.spimaco.com.sa/viewalljobs/",
+      "https://careers.spimaco.com.sa/go/Operationes/7741123/",
       "https://careers.spimaco.com.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
       "https://careers.spimaco.com.sa/viewalljobs/?locale=en_US"
     ]
@@ -78,6 +81,8 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.sab.com",
     listingUrls: [
+      "https://careers.sab.com/viewalljobs/",
+      "https://careers.sab.com/go/Search-Jobs/3641501/",
       "https://careers.sab.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc",
       "https://careers.sab.com/viewalljobs/?locale=en_US"
     ]
@@ -90,6 +95,11 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.jhah.com",
     listingUrls: [
+      "https://careers.jhah.com/viewalljobs/",
+      "https://careers.jhah.com/go/Nursing-Jobs/4382823/",
+      "https://careers.jhah.com/go/Physician-Jobs/4382923/",
+      "https://careers.jhah.com/go/Corporate-Jobs/4383023/",
+      "https://careers.jhah.com/go/Hot-Jobs/4383223/",
       "https://careers.jhah.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
     ]
   },
@@ -197,7 +207,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.2.0";
+const VERSION = "3.2.1";
 const LOCALIZATION_VERSION = "ar-v3";
 const nowIso = () => new Date().toISOString();
 
@@ -280,8 +290,17 @@ const sha256 = async (value) => {
 };
 
 function externalIdFromUrl(url) {
-  const match = String(url).match(/\/(\d{4,})\/?(?:[?#]|$)/);
-  return match?.[1] || null;
+  const text = String(url ?? "");
+  const pathMatch = text.match(/\/(\d{4,})\/?(?:[?#]|$)/);
+  if (pathMatch?.[1]) return pathMatch[1];
+  try {
+    const parsed = new URL(text);
+    for (const key of ["jobId", "jobid", "job", "id", "reqId", "requisitionId"]) {
+      const value = parsed.searchParams.get(key);
+      if (/^\d{4,}$/.test(value || "")) return value;
+    }
+  } catch {}
+  return null;
 }
 
 function normalizeDigits(value) {
@@ -351,9 +370,10 @@ function discoverJobUrls(html, source, baseUrl) {
 
     try {
       const parsed = new URL(url);
-      if (parsed.hostname !== source.host) return;
-      if (!/\/job\//i.test(parsed.pathname)) return;
-      if (!/\/\d{4,}\/?$/i.test(parsed.pathname)) return;
+      if (!isAllowedOfficialUrl(parsed.href, source)) return;
+      const looksLikeJob = /\/job(?:\/|s\/)/i.test(parsed.pathname) ||
+        /(?:jobId|jobid|reqId|requisitionId)=\d{4,}/i.test(parsed.search);
+      if (!looksLikeJob || !externalIdFromUrl(parsed.href)) return;
       found.add(parsed.href);
     } catch {
       // Ignore invalid URLs.
@@ -698,7 +718,7 @@ async function syncPortalMonitorSource(env, source) {
         Accept: "text/html,application/xhtml+xml"
       },
       redirect: "follow",
-      signal: AbortSignal.timeout(12000)
+      signal: AbortSignal.timeout(20000)
     });
     const status = portalResponseStatus(response.status);
     const reachable = status !== "error";
@@ -807,7 +827,7 @@ async function fetchText(url) {
       Accept: "text/html,application/xhtml+xml"
     },
     redirect: "follow",
-    signal: AbortSignal.timeout(15000)
+    signal: AbortSignal.timeout(25000)
   });
 
   if (!response.ok) {

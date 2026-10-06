@@ -41,3 +41,23 @@ test("creates stable IDs for title-based official listings", () => {
   assert.equal(stableTextId("moh-current", "إعلان طبي ١"), stableTextId("moh-current", "إعلان طبي ١"));
   assert.notEqual(stableTextId("moh-current", "إعلان طبي ١"), stableTextId("moh-current", "إعلان طبي ٢"));
 });
+
+
+test("discovers encoded SuccessFactors job URLs from official hosts", () => {
+  const html = '<a href="/job/Riyadh-Sales-%26-Planning%2C-Manager-13315/856308023/">role</a>';
+  assert.deepEqual(discoverJobUrls(html, sf, sf.listingUrls[0]), ["https://careers.example.sa/job/Riyadh-Sales-%26-Planning%2C-Manager-13315/856308023/"]);
+});
+
+test("does not treat generic careers pages as confirmed empty listings", () => {
+  assert.equal(pageExplicitlyHasNoJobs("<h1>Careers</h1><p>Search our opportunities</p>"), false);
+});
+
+
+test("discovers official job URLs with query-string requisition IDs", () => {
+  const html = '<a href="/jobs/search/?jobId=987654">query job</a>';
+  assert.deepEqual(discoverJobUrls(html, sf, sf.listingUrls[0]), ["https://careers.example.sa/jobs/search/?jobId=987654"]);
+});
+
+test("extracts external IDs from official query-string job URLs", () => {
+  assert.equal(externalIdFromUrl("https://careers.example.sa/jobs/search/?requisitionId=7654321"), "7654321");
+});
