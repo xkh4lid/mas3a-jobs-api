@@ -19,7 +19,9 @@ import {
   telegramCompanyDomain,
   telegramCompanyLogoCandidateUrls,
   telegramJobCardUrl,
-  TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY
+  telegramShareUrl,
+  TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY,
+  TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -218,7 +220,7 @@ test("wraps long Telegram job titles without overflowing the card", () => {
 test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
   const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
   assert.equal(url.searchParams.get("job"), "job-123");
-  assert.equal(url.searchParams.get("v"), "3.33.0-channel-company-logo-cards");
+  assert.equal(url.searchParams.get("v"), "3.34.0-telegram-growth-loop");
 });
 
 
@@ -249,5 +251,22 @@ test("does not treat recruitment platforms as company logo domains", () => {
       apply_url: "https://example.wd3.myworkdayjobs.com/job/123"
     }),
     ""
+  );
+});
+
+
+test("builds Telegram share URLs only for real Telegram channel links", () => {
+  const share = new URL(telegramShareUrl("https://t.me/masaa_jobs", "وظيفة جديدة"));
+  assert.equal(share.hostname, "t.me");
+  assert.equal(share.pathname, "/share/url");
+  assert.equal(share.searchParams.get("url"), "https://t.me/masaa_jobs");
+  assert.equal(share.searchParams.get("text"), "وظيفة جديدة");
+  assert.equal(telegramShareUrl("https://example.com/channel", "x"), "");
+});
+
+test("uses a fixed one-time growth welcome marker", () => {
+  assert.equal(
+    TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY,
+    "channel_growth_welcome_2026_10_v1"
   );
 });
