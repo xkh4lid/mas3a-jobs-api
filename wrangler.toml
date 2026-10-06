@@ -5,6 +5,23 @@ compatibility_date = "2026-09-01"
 [triggers]
 crons = ["17 * * * *"]
 
+
+[[ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "93015401"
+
+  [ratelimits.simple]
+  limit = 180
+  period = 60
+
+[[ratelimits]]
+name = "WRITE_RATE_LIMITER"
+namespace_id = "93015402"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
 [[d1_databases]]
 binding = "DB"
 database_name = "mas3a-jobs"
