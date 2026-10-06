@@ -14,7 +14,8 @@ import {
   successFactorsSearchUrls,
   scheduledSourceKeyForMinute,
   isIncompleteArabicJobTitle,
-  jobTitleOverrideFromUrl
+  jobTitleOverrideFromUrl,
+  telegramJobCardSvg
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -154,4 +155,21 @@ test("repairs known JHAH patient safety titles from the official job URL", () =>
     jobTitleOverrideFromUrl("https://careers.jhah.com/job/Dhahran-ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_/857146123/"),
     "أخصائي مشارك في إدارة المخاطر وسلامة المرضى"
   );
+});
+
+
+test("renders a safe dynamic Telegram SVG job card", () => {
+  const svg = telegramJobCardSvg({
+    id: "job-1",
+    title: "مهندس <اختبار>",
+    company: "شركة & موثوقة",
+    city: "الرياض",
+    sector: "خاص",
+    expires_at: "2026-10-31"
+  });
+  assert.match(svg, /^<svg /);
+  assert.match(svg, /مهندس &lt;اختبار&gt;/);
+  assert.match(svg, /شركة &amp; موثوقة/);
+  assert.doesNotMatch(svg, /<اختبار>/);
+  assert.match(svg, /التقديم من المصدر الرسمي/);
 });
