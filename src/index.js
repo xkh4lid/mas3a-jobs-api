@@ -2179,23 +2179,116 @@ async function runSync(env) {
   };
 }
 
-function corsHeaders(env) {
+const MAX_CONTACT_BODY_BYTES = 16 * 1024;
+
+function securityHeaders() {
   return {
-    "Access-Control-Allow-Origin": env.CORS_ORIGIN || "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Masaa-Sync-Key",
-    "Access-Control-Max-Age": "86400"
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
   };
 }
 
-function json(data, env, status = 200) {
+function corsHeaders(env) {
+  const configuredOrigin = clean(env.CORS_ORIGIN || "");
+  const headers = {
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Masaa-Sync-Key",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin"
+  };
+
+  // Secure default: if CORS_ORIGIN is missing, do not allow cross-origin browser access.
+  if (configuredOrigin) headers["Access-Control-Allow-Origin"] = configuredOrigin;
+  return headers;
+}
+
+function json(data, env, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      ...corsHeaders(env)
+      ...securityHeaders(),
+      ...corsHeaders(env),
+      ...extraHeaders
     }
   });
+}
+
+function internalError(error, env) {
+  const requestId = crypto.randomUUID();
+  console.error("mas3a_request_error", {
+    requestId,
+    message: clean(error?.message || error)
+  });
+  return json(
+    { ok: false, error: "Internal server error", request_id: requestId },
+    env,
+    500
+  );
+}
+
+function requestRateKey(request, scope) {
+  const ip = clean(request.headers.get("CF-Connecting-IP"));
+  return ip ? `${scope}:${ip}` : null;
+}
+
+async function rateLimitAllowed(binding, key) {
+  if (!binding || !key) return true;
+  try {
+    const result = await binding.limit({ key });
+    return result?.success !== false;
+  } catch (error) {
+    // Fail open to avoid an availability outage if the rate limiter itself has an incident.
+    console.error("mas3a_rate_limit_error", clean(error?.message || error));
+    return true;
+  }
+}
+
+async function readJsonBodyLimited(request, maxBytes) {
+  const declaredLength = Number(request.headers.get("Content-Length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    return { ok: false, status: 413, error: "Request body too large" };
+  }
+
+  if (!request.body) {
+    return { ok: false, status: 400, error: "Invalid JSON" };
+  }
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return { ok: false, status: 413, error: "Request body too large" };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return { ok: true, data: JSON.parse(new TextDecoder().decode(bytes)) };
+  } catch {
+    return { ok: false, status: 400, error: "Invalid JSON" };
+  }
 }
 
 function parseBoolean(value) {
@@ -2396,8 +2489,11 @@ async function createContactSubmission(request, env) {
     return { status: 403, body: { ok: false, error: "Origin not allowed" } };
   }
 
-  let data;
-  try { data = await request.json(); } catch { return { status: 400, body: { ok: false, error: "Invalid JSON" } }; }
+  const parsedBody = await readJsonBodyLimited(request, MAX_CONTACT_BODY_BYTES);
+  if (!parsedBody.ok) {
+    return { status: parsedBody.status, body: { ok: false, error: parsedBody.error } };
+  }
+  const data = parsedBody.data;
   if (clean(data.website)) return { status: 200, body: { ok: true } }; // honeypot
 
   const type = clean(data.type).slice(0, 40);
@@ -2438,6 +2534,52 @@ async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
+  if (!["GET", "POST"].includes(request.method)) {
+    return json(
+      { ok: false, error: "Method not allowed" },
+      env,
+      405,
+      { "Allow": "GET, POST, OPTIONS" }
+    );
+  }
+
+  const isPublicApiRead =
+    request.method === "GET" &&
+    (path === "/jobs" ||
+      path.startsWith("/jobs/") ||
+      path === "/sources" ||
+      path === "/stats");
+
+  if (isPublicApiRead) {
+    const allowed = await rateLimitAllowed(
+      env.API_RATE_LIMITER,
+      requestRateKey(request, "api")
+    );
+    if (!allowed) {
+      return json(
+        { ok: false, error: "Too many requests" },
+        env,
+        429,
+        { "Retry-After": "60" }
+      );
+    }
+  }
+
+  if (request.method === "POST" && (path === "/contact" || path === "/sync")) {
+    const allowed = await rateLimitAllowed(
+      env.WRITE_RATE_LIMITER,
+      requestRateKey(request, path === "/contact" ? "contact" : "sync")
+    );
+    if (!allowed) {
+      return json(
+        { ok: false, error: "Too many requests" },
+        env,
+        429,
+        { "Retry-After": "60" }
+      );
+    }
+  }
+
   if (request.method === "GET" && path === "/") {
     return json({
       ok: true,
@@ -2463,13 +2605,13 @@ async function handleRequest(request, env) {
       const result = await getJobById(id, env);
       return json(result, env, result.ok ? 200 : 404);
     } catch (error) {
-      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+      return internalError(error, env);
     }
   }
 
   if (request.method === "GET" && path === "/sitemap") {
     try { return json(await sitemapJobs(env), env); }
-    catch (error) { return json({ ok: false, error: clean(error?.message || error) }, env, 500); }
+    catch (error) { return internalError(error, env); }
   }
 
   if (request.method === "POST" && path === "/contact") {
@@ -2477,7 +2619,7 @@ async function handleRequest(request, env) {
       const result = await createContactSubmission(request, env);
       return json(result.body, env, result.status);
     } catch (error) {
-      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+      return internalError(error, env);
     }
   }
 
@@ -2485,7 +2627,7 @@ async function handleRequest(request, env) {
     try {
       return json(await listJobs(request, env), env);
     } catch (error) {
-      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+      return internalError(error, env);
     }
   }
 
@@ -2493,7 +2635,7 @@ async function handleRequest(request, env) {
     try {
       return json(await listSources(env), env);
     } catch (error) {
-      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+      return internalError(error, env);
     }
   }
 
@@ -2501,7 +2643,7 @@ async function handleRequest(request, env) {
     try {
       return json(await stats(env), env);
     } catch (error) {
-      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+      return internalError(error, env);
     }
   }
 
@@ -2512,7 +2654,7 @@ async function handleRequest(request, env) {
       const result = await runSync(env);
       return json(result, env, result.ok ? 200 : 207);
     } catch (error) {
-      return json({ ok: false, error: clean(error?.message || error) }, env, 500);
+      return internalError(error, env);
     }
   }
 
