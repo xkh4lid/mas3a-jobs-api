@@ -1155,8 +1155,16 @@ function findApplyUrl(html, source, fallback) {
     }
   }
 
-  const raw = String(html ?? "").match(/https:\/\/(?:jobs\.sang\.gov\.sa|jobs\.sa)[^\s"'<>]*/i)?.[0];
-  if (raw) return raw;
+  const hosts = (source.applyHosts || [])
+    .map((host) => host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+
+  if (hosts) {
+    const rawRegex = new RegExp("https:\\/\\/(?:" + hosts + ")[^\\s\"'<>]*", "i");
+    const raw = String(html ?? "").match(rawRegex)?.[0];
+    if (raw) return raw;
+  }
+
   return source.applyHosts?.length ? null : fallback;
 }
 
