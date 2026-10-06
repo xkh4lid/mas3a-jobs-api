@@ -312,7 +312,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.9.0";
+const VERSION = "3.10.0";
 const LOCALIZATION_VERSION = "ar-v5";
 const nowIso = () => new Date().toISOString();
 
@@ -463,6 +463,105 @@ function discoverJobUrls(html, source, baseUrl) {
   }
 
   return [...found];
+}
+
+
+function titleFromJobUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const jobIndex = parts.findIndex((part) => part.toLowerCase() === "job");
+    if (jobIndex < 0 || !parts[jobIndex + 1]) return "";
+    return clean(decodeURIComponent(parts[jobIndex + 1]).replace(/[-_]+/g, " "));
+  } catch {
+    return "";
+  }
+}
+
+function listingCityFromText(value) {
+  const text = clean(value);
+  const cities = [
+    ["Riyadh", "الرياض"], ["Jeddah", "جدة"], ["Jubail", "الجبيل"],
+    ["Yanbu", "ينبع"], ["Dammam", "الدمام"], ["Dhahran", "الظهران"],
+    ["Khobar", "الخبر"], ["Al Khobar", "الخبر"], ["Makkah", "مكة المكرمة"],
+    ["Mecca", "مكة المكرمة"], ["Madinah", "المدينة المنورة"],
+    ["Medina", "المدينة المنورة"], ["Tabuk", "تبوك"], ["Jazan", "جازان"],
+    ["Abha", "أبها"], ["Najran", "نجران"], ["Rabigh", "رابغ"]
+  ];
+
+  for (const [english, arabic] of cities) {
+    const pattern = english.replace(/ /g, "\\s+");
+    if (new RegExp(`\\b${pattern}\\b`, "i").test(text)) return arabic;
+  }
+
+  if (/\b(?:SA|KSA)\b|Saudi Arabia|Kingdom of Saudi Arabia/i.test(text)) return "السعودية";
+  return null;
+}
+
+function listingDateFromText(value) {
+  const text = clean(value);
+  const english = text.match(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+20\d{2}\b/i);
+  if (english?.[0]) return parseDate(english[0]);
+  const dmy = text.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]20\d{2}\b/);
+  return dmy?.[0] ? parseDate(dmy[0]) : null;
+}
+
+function extractListingCandidates(html, source, baseUrl) {
+  const normalized = normalizeListingHtml(html);
+  const found = new Map();
+  const anchorRegex = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+
+  while ((match = anchorRegex.exec(normalized))) {
+    const url = absoluteUrl(match[1], baseUrl);
+    let parsed;
+    try { parsed = new URL(url); } catch { continue; }
+
+    if (parsed.hostname !== source.host) continue;
+    if (!/\/job\//i.test(parsed.pathname)) continue;
+    if (!/\/\d{4,}\/?$/i.test(parsed.pathname)) continue;
+
+    let title = stripHtml(match[2]);
+    if (!title || title.length < 3 || /^(?:apply|view|details|learn more)$/i.test(title)) {
+      title = titleFromJobUrl(parsed.href);
+    }
+    if (!title || title.length < 3) continue;
+
+    const rowStart = normalized.lastIndexOf("<tr", match.index);
+    const rowEnd = normalized.indexOf("</tr>", match.index);
+    const rowHtml = rowStart >= 0 && rowEnd > rowStart
+      ? normalized.slice(rowStart, rowEnd + 5)
+      : normalized.slice(Math.max(0, match.index - 500), Math.min(normalized.length, anchorRegex.lastIndex + 900));
+    const rowText = stripHtml(rowHtml);
+    const entry = inferEntryLevel({ title, description: rowText, experience: "" });
+
+    const candidate = {
+      external_id: externalIdFromUrl(parsed.href),
+      title,
+      company: source.company,
+      sector: source.sector,
+      city: listingCityFromText(rowText),
+      region: null,
+      work_mode: null,
+      qualification: null,
+      specialization: null,
+      experience: null,
+      salary: null,
+      published_at: listingDateFromText(rowText),
+      expires_at: null,
+      summary: null,
+      source_url: parsed.href,
+      apply_url: parsed.href,
+      remote: 0,
+      fresh_graduate: entry.freshGraduate ? 1 : 0,
+      no_experience: entry.noExperience ? 1 : 0
+    };
+
+    const previous = found.get(parsed.href);
+    if (!previous || candidate.title.length > previous.title.length) found.set(parsed.href, candidate);
+  }
+
+  return [...found.values()];
 }
 
 
@@ -1489,7 +1588,7 @@ async function quarantineStaleUnverifiedJobs(env) {
   return Number(result.meta?.changes || 0);
 }
 
-async function saveJob(env, source, rawJob) {
+async function saveJob(env, source, rawJob, options = {}) {
   if (!rawJob.title || !rawJob.apply_url) {
     return { added: false, updated: false, rejected: "missing_required_fields" };
   }
@@ -1552,7 +1651,9 @@ async function saveJob(env, source, rawJob) {
     return { added: false, updated: false };
   }
 
-  const job = await localizeJob(env, source, rawJob);
+  const job = options.skipLocalization
+    ? { ...rawJob, company: source.companyAr || rawJob.company }
+    : await localizeJob(env, source, rawJob);
 
   if (!existing) {
     const id = rawJob.external_id ? `${source.key}-${rawJob.external_id}` : crypto.randomUUID();
@@ -2231,6 +2332,128 @@ async function activeSyncRun(env) {
      ORDER BY id DESC
      LIMIT 1`
   ).first();
+}
+
+async function syncListingSnapshotSource(env, source, maxNewJobs = 60) {
+  const queue = [...(source.listingUrls || [])];
+  const visited = new Set();
+  const candidates = new Map();
+  let fetchErrors = 0;
+
+  while (queue.length && visited.size < 12) {
+    const listingUrl = queue.shift();
+    if (!listingUrl || visited.has(listingUrl)) continue;
+    visited.add(listingUrl);
+
+    try {
+      const html = await fetchText(listingUrl, { attempts: 2 });
+      for (const job of extractListingCandidates(html, source, listingUrl)) {
+        if (job.external_id) candidates.set(job.external_id, job);
+      }
+
+      for (const pageUrl of discoverPaginationUrls(html, source, listingUrl)) {
+        if (!visited.has(pageUrl) && !queue.includes(pageUrl) && queue.length < 20) queue.push(pageUrl);
+      }
+    } catch {
+      fetchErrors += 1;
+    }
+  }
+
+  let added = 0;
+  let updated = 0;
+  let rejected = 0;
+  const cap = Math.max(0, Number(maxNewJobs) || 0);
+
+  for (const job of candidates.values()) {
+    if (added >= cap) break;
+    const result = await saveJob(env, source, job, { skipLocalization: true });
+    if (result.added) added += 1;
+    if (result.updated) updated += 1;
+    if (result.rejected) rejected += 1;
+  }
+
+  const errors = fetchErrors + rejected;
+  await upsertSource(env, source, {
+    success: errors === 0,
+    jobsSeen: candidates.size,
+    newJobs: added,
+    error: errors ? `${fetchErrors} listing page(s) failed | ${rejected} candidate(s) rejected` : null,
+    status: errors ? "partial" : "ok"
+  });
+
+  return {
+    source: source.key,
+    jobsSeen: candidates.size,
+    added,
+    updated,
+    rejected,
+    listing_pages: visited.size,
+    errors
+  };
+}
+
+async function runCatchupListingBatch(env, target = CATCHUP_TARGET_JOBS) {
+  const activeRun = await activeSyncRun(env);
+  if (activeRun) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "sync_already_running",
+      active_run_id: activeRun.id,
+      active_started_at: activeRun.started_at
+    };
+  }
+
+  await ensureCatalogSources(env);
+  await expirePastDeadlineJobs(env);
+
+  const currentTotal = await verifiedJobCount(env);
+  if (currentTotal >= target) {
+    return { ok: true, skipped: true, reason: "catchup_target_reached", total: currentTotal };
+  }
+
+  const { startedAt, runId } = await beginSyncRun(env);
+  let needed = target - currentTotal;
+  let jobsSeen = 0;
+  let jobsAdded = 0;
+  let jobsUpdated = 0;
+  let errors = 0;
+  let sourcesChecked = 0;
+  const results = [];
+
+  for (const key of CATCHUP_SOURCE_ORDER) {
+    if (needed <= 0) break;
+    const source = successFactorsSourceByKey(key);
+    if (!source) continue;
+
+    const result = await syncListingSnapshotSource(env, source, needed);
+    sourcesChecked += 1;
+    jobsSeen += result.jobsSeen || 0;
+    jobsAdded += result.added || 0;
+    jobsUpdated += result.updated || 0;
+    errors += result.errors || 0;
+    needed -= result.added || 0;
+    results.push(result);
+  }
+
+  const summary = { sourcesChecked, jobsSeen, jobsAdded, jobsUpdated, errors };
+  const finishedAt = await finishSyncRun(env, runId, summary);
+  const total = await verifiedJobCount(env);
+
+  return {
+    ok: total >= target || errors === 0,
+    mode: "listing_catchup",
+    target,
+    total,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    sources_checked: sourcesChecked,
+    jobs_seen: jobsSeen,
+    jobs_added: jobsAdded,
+    jobs_updated: jobsUpdated,
+    errors,
+    results
+  };
 }
 
 async function beginSyncRun(env) {
@@ -2973,7 +3196,10 @@ async function handleRequest(request, env) {
     if (!isSyncAuthorized(request, env)) return json({ ok: false, error: "Unauthorized" }, env, 401);
     try {
       const sourceKey = clean(url.searchParams.get("source"));
-      const result = await runSync(env, { sourceKey });
+      const catchup = url.searchParams.get("catchup") === "1";
+      const result = catchup
+        ? await runCatchupListingBatch(env, CATCHUP_TARGET_JOBS)
+        : await runSync(env, { sourceKey });
       return json(result, env, result.ok ? 200 : 207);
     } catch (error) {
       return internalError(error, env);
@@ -2983,7 +3209,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute };
+export { discoverJobUrls, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute };
 
 export default {
   async fetch(request, env) {
@@ -2991,18 +3217,18 @@ export default {
   },
 
   async scheduled(controller, env, ctx) {
-    if (controller.cron === "17 * * * *") {
-      ctx.waitUntil(runSupportBatch(env));
-      return;
-    }
-
-    const minute = new Date(controller.scheduledTime).getUTCMinutes();
     ctx.waitUntil((async () => {
       const totalJobs = await verifiedJobCount(env);
-      const sourceKey = totalJobs < CATCHUP_TARGET_JOBS
-        ? catchupSourceKeyForMinute(minute)
-        : scheduledSourceKeyForMinute(minute);
-      return runSourceBatch(env, sourceKey);
+
+      if (totalJobs < CATCHUP_TARGET_JOBS) {
+        return runCatchupListingBatch(env, CATCHUP_TARGET_JOBS);
+      }
+
+      if (controller.cron === "17 * * * *") {
+        return runSupportBatch(env);
+      }
+
+      const minute = new Date(controller.scheduledTime).getUTCMinutes();
+      return runSourceBatch(env, scheduledSourceKeyForMinute(minute));
     })());
-  }
-};
+  }};
