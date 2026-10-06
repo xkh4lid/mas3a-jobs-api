@@ -17,7 +17,8 @@ import {
   jobTitleOverrideFromUrl,
   telegramJobCardSvg,
   telegramCompanyDomain,
-  telegramJobCardUrl
+  telegramJobCardUrl,
+  TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -216,5 +217,13 @@ test("wraps long Telegram job titles without overflowing the card", () => {
 test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
   const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
   assert.equal(url.searchParams.get("job"), "job-123");
-  assert.equal(url.searchParams.get("v"), "3.32.0-masaa-identity-card");
+  assert.equal(url.searchParams.get("v"), "3.32.1-channel-identity-preview");
+});
+
+
+test("uses a fixed one-time Telegram channel preview marker", () => {
+  assert.equal(
+    TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY,
+    "channel_identity_preview_2026_10_07_v1"
+  );
 });
