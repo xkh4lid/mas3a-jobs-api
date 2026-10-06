@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/index.js && node --test",
+    "check": "node --check src/index.js && node --experimental-wasm-modules --test && npm run build:check",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply DB --remote",
-    "test": "node --test"
+    "test": "node --test",
+    "build:check": "wrangler deploy --dry-run --outdir .wrangler-dry-run"
   },
   "devDependencies": {
     "wrangler": "^4.36.0"
+  },
+  "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2"
   }
 }
