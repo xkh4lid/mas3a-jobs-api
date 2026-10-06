@@ -16,7 +16,8 @@ import {
   isIncompleteArabicJobTitle,
   jobTitleOverrideFromUrl,
   telegramJobCardSvg,
-  telegramCompanyDomain
+  telegramCompanyDomain,
+  telegramJobCardUrl
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -208,4 +209,11 @@ test("wraps long Telegram job titles without overflowing the card", () => {
   const titleLines = [...svg.matchAll(/font-size="44"[^>]*>([^<]+)<\/text>/g)].map((match) => match[1]);
   assert.ok(titleLines.length >= 1 && titleLines.length <= 2);
   assert.ok(titleLines.every((line) => line.length <= 36));
+});
+
+
+test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
+  const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
+  assert.equal(url.searchParams.get("job"), "job-123");
+  assert.equal(url.searchParams.get("v"), "3.31.1-telegram-card-cache-bust");
 });

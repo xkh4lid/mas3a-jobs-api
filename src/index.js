@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.31.0-telegram-card-brand-polish";
+const VERSION = "3.31.1-telegram-card-cache-bust";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4966,6 +4966,7 @@ function telegramJobCardUrl(env, job) {
     const url = new URL(base);
     if (url.protocol !== "https:") return "";
     url.searchParams.set("job", String(job.id));
+    url.searchParams.set("v", VERSION);
     return url.href;
   } catch {
     return "";
@@ -5493,7 +5494,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramJobCardUrl };
 
 export default {
   async fetch(request, env) {
