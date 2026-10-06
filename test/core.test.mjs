@@ -8,7 +8,8 @@ import {
   parseDate,
   isAllowedOfficialUrl,
   stableTextId,
-  successFactorsSearchUrls
+  successFactorsSearchUrls,
+  scheduledSourceKeyForMinute
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
@@ -55,4 +56,11 @@ test("keeps explicitly scoped official search URLs without broadening globally",
     successFactorsSearchUrls(source),
     ["https://careers.example.sa/search/?q=&locationsearch=SA"]
   );
+});
+
+
+test("shards scheduled source syncs across five-minute slots", () => {
+  assert.equal(scheduledSourceKeyForMinute(35), "alfanar");
+  assert.equal(scheduledSourceKeyForMinute(40), "acwa-power");
+  assert.equal(scheduledSourceKeyForMinute(45), "tasnee");
 });
