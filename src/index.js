@@ -271,7 +271,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.6.2";
+const VERSION = "3.7.0";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -2298,15 +2298,15 @@ function parseBoolean(value) {
 
 async function listJobs(request, env) {
   const url = new URL(request.url);
-  const q = clean(url.searchParams.get("q"));
-  const city = clean(url.searchParams.get("city"));
-  const sector = clean(url.searchParams.get("sector"));
-  const source = clean(url.searchParams.get("source"));
+  const q = clean(url.searchParams.get("q")).slice(0, 120);
+  const city = clean(url.searchParams.get("city")).slice(0, 80);
+  const sector = clean(url.searchParams.get("sector")).slice(0, 40);
+  const source = clean(url.searchParams.get("source")).slice(0, 80);
   const remote = parseBoolean(url.searchParams.get("remote"));
   const freshGraduate = parseBoolean(url.searchParams.get("fresh_graduate"));
   const noExperience = parseBoolean(url.searchParams.get("no_experience"));
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 50, 1), 100);
-  const offset = Math.max(Number(url.searchParams.get("offset")) || 0, 0);
+  const offset = Math.min(Math.max(Number(url.searchParams.get("offset")) || 0, 0), 5000);
   const includeExpiredDays = Math.min(Math.max(Number(url.searchParams.get("include_expired_days")) || 0, 0), 90);
 
   const where = [];
@@ -2482,7 +2482,41 @@ function validHttpsUrl(value) {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
+async function verifyTurnstile(request, env, token) {
+  if (!env.TURNSTILE_SECRET_KEY) return { ok: true, skipped: true };
+  if (!token) return { ok: false, reason: "missing_token" };
+
+  const body = new FormData();
+  body.append("secret", env.TURNSTILE_SECRET_KEY);
+  body.append("response", token);
+
+  const remoteIp = clean(request.headers.get("CF-Connecting-IP"));
+  if (remoteIp) body.append("remoteip", remoteIp);
+
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body
+    });
+
+    if (!response.ok) return { ok: false, reason: "verification_unavailable" };
+    const result = await response.json();
+    return {
+      ok: result?.success === true,
+      reason: result?.success === true ? null : "challenge_failed"
+    };
+  } catch (error) {
+    console.error("mas3a_turnstile_error", clean(error?.message || error));
+    return { ok: false, reason: "verification_unavailable" };
+  }
+}
+
 async function createContactSubmission(request, env) {
+  const contentType = clean(request.headers.get("Content-Type")).toLowerCase();
+  if (!contentType.includes("application/json")) {
+    return { status: 415, body: { ok: false, error: "Content-Type must be application/json" } };
+  }
+
   const configuredOrigin = env.CORS_ORIGIN || "";
   const origin = request.headers.get("Origin") || "";
   if (configuredOrigin && configuredOrigin !== "*" && origin !== configuredOrigin) {
@@ -2495,6 +2529,12 @@ async function createContactSubmission(request, env) {
   }
   const data = parsedBody.data;
   if (clean(data.website)) return { status: 200, body: { ok: true } }; // honeypot
+
+  const turnstileToken = clean(data.turnstile_token || data["cf-turnstile-response"]);
+  const turnstile = await verifyTurnstile(request, env, turnstileToken);
+  if (!turnstile.ok) {
+    return { status: 403, body: { ok: false, error: "Human verification failed" } };
+  }
 
   const type = clean(data.type).slice(0, 40);
   const organization = clean(data.organization).slice(0, 160);
@@ -2581,22 +2621,11 @@ async function handleRequest(request, env) {
   }
 
   if (request.method === "GET" && path === "/") {
-    return json({
-      ok: true,
-      service: "Masaa Jobs API",
-      version: VERSION,
-      language: "ar",
-      endpoints: ["GET /health", "GET /jobs", "GET /jobs/:id", "GET /sources", "GET /stats", "GET /sitemap", "POST /contact", "POST /sync (protected)"],
-      ingestion_sources: SUCCESSFACTORS_SOURCES.length + OFFICIAL_LISTING_SOURCES.length + MILITARY_NEWS_SOURCES.length,
-      monitored_portals: PORTAL_MONITOR_SOURCES.length,
-      automation_policy: "official-source-only",
-      trust_gate: true,
-      retry_fetches: true
-    }, env);
+    return json({ ok: true, service: "Masaa Jobs API" }, env);
   }
 
   if (request.method === "GET" && path === "/health") {
-    return json({ ok: true, service: "Masaa Jobs API", version: VERSION, time: nowIso() }, env);
+    return json({ ok: true }, env, 200, { "Cache-Control": "no-store" });
   }
 
   if (request.method === "GET" && path.startsWith("/jobs/") && path.length > 6) {
