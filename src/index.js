@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.22.0-rich-job-details";
+const VERSION = "3.23.0-telegram-channel-link";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4972,14 +4972,36 @@ async function handleRequest(request, env) {
     try {
       await ensureTelegramStorage(env);
       const channelId = await resolveTelegramChannelId(env);
+      const channelUsername = clean(await telegramGetMeta(env, "channel_username")).replace(/^@/, "");
       const subscriberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM telegram_subscribers WHERE alerts_enabled = 1").first();
       return json({
         ok: true,
         configured: Boolean(env.TELEGRAM_BOT_TOKEN),
         channel_connected: Boolean(channelId),
+        channel_public_url: channelUsername ? "https://t.me/" + channelUsername : null,
         alerts_enabled_count: Number(subscriberCount?.count || 0),
         webhook_path: TELEGRAM_WEBHOOK_PATH
       }, env, 200, { "Cache-Control": "no-store" });
+    } catch (error) {
+      return internalError(error, env);
+    }
+  }
+
+  if (request.method === "GET" && path === "/telegram/channel") {
+    try {
+      await ensureTelegramStorage(env);
+      const channelUsername = clean(await telegramGetMeta(env, "channel_username")).replace(/^@/, "");
+      if (!channelUsername) {
+        return json({ ok: false, error: "Telegram channel does not have a public username yet" }, env, 404, { "Cache-Control": "no-store" });
+      }
+      return new Response(null, {
+        status: 302,
+        headers: {
+          "Location": "https://t.me/" + channelUsername,
+          "Cache-Control": "public, max-age=300",
+          ...securityHeaders()
+        }
+      });
     } catch (error) {
       return internalError(error, env);
     }
@@ -5003,6 +5025,8 @@ async function handleRequest(request, env) {
       path === "/sources" ||
       path === "/stats" ||
       path === "/analytics/summary" ||
+      path === "/telegram/status" ||
+      path === "/telegram/channel" ||
       path === "/sitemap");
 
   if (isPublicApiRead) {
