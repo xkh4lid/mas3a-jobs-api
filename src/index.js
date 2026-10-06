@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.14.0";
+const VERSION = "3.15.0";
 const LOCALIZATION_VERSION = "ar-v6";
 const nowIso = () => new Date().toISOString();
 
@@ -3248,6 +3248,16 @@ async function runSupportBatch(env) {
   errors += discoveryResult.errors || 0;
   results.push(discoveryResult);
 
+  for (const discoverySource of ADDITIONAL_DISCOVERY_SOURCES) {
+    const result = await syncAdditionalDiscoverySource(env, discoverySource);
+    sourcesChecked += 1;
+    jobsSeen += result.jobsSeen || 0;
+    jobsAdded += result.added || 0;
+    jobsUpdated += result.updated || 0;
+    errors += result.errors || 0;
+    results.push(result);
+  }
+
   const discoveryDuplicates = await quarantineDiscoveryDuplicates(env);
   const quarantinedStaleJobs = await quarantineStaleUnverifiedJobs(env);
   await dedupeExistingJobs(env);
@@ -3276,6 +3286,12 @@ async function runSync(env, options = {}) {
   const sourceKey = clean(options.sourceKey || "");
   if (sourceKey === "ewdifh") {
     const result = await syncEwdifhDiscoverySource(env, EWDIFH_SOURCE, 10);
+    await quarantineDiscoveryDuplicates(env);
+    return { ok: (result.errors || 0) === 0, mode: "discovery_source", result };
+  }
+  const discoverySource = ADDITIONAL_DISCOVERY_SOURCES.find((item) => item.key === sourceKey);
+  if (discoverySource) {
+    const result = await syncAdditionalDiscoverySource(env, discoverySource);
     await quarantineDiscoveryDuplicates(env);
     return { ok: (result.errors || 0) === 0, mode: "discovery_source", result };
   }
@@ -3426,9 +3442,14 @@ function publicArabicJob(row) {
       "فرصة وظيفية لدى " + company + ". راجع رابط التقديم للاطلاع على التفاصيل والمتطلبات.",
       700
     ),
-    verification_level: row.source_key === "ewdifh" || row.status === "discovered" ? "discovery" : "official",
-    verification_label: row.source_key === "ewdifh" || row.status === "discovered"
-      ? "اكتشاف عبر أي وظيفة — رابط التقديم لدى الجهة"
+    verification_level: row.status === "discovered" ? "discovery" : "official",
+    verification_label: row.status === "discovered"
+      ? ({
+          "ewdifh": "اكتشاف عبر أي وظيفة — رابط التقديم لدى الجهة",
+          "wadhefa-com": "اكتشاف عبر وظيفة.كوم — راجع المصدر وطريقة التقديم",
+          "wdeftksa": "اكتشاف عبر وظيفتك علينا — رابط التقديم لدى الجهة",
+          "isaudinews": "اكتشاف عبر سعودي نيوز — رابط التقديم لدى الجهة"
+        }[row.source_key] || "مصدر اكتشاف — راجع الجهة المعلنة قبل التقديم")
       : "متحقق من المصدر الرسمي"
   };
 }
