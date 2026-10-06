@@ -1296,6 +1296,189 @@ function extractMilitaryAnnouncement(html, source, url) {
   };
 }
 
+function discoverEwdifhArticleUrls(html, baseUrl) {
+  const found = new Set();
+  const normalized = normalizeListingHtml(html);
+  const hrefRegex = /<a\b[^>]*href\s*=\s*["\']([^"\']+)["\'][^>]*>/gi;
+  let match;
+  while ((match = hrefRegex.exec(normalized))) {
+    const url = absoluteUrl(match[1], baseUrl);
+    try {
+      const parsed = new URL(url);
+      if (!/(?:^|\.)ewdifh\.com$/i.test(parsed.hostname)) continue;
+      if (!/^\/jobs\/\d+\/?$/i.test(parsed.pathname)) continue;
+      parsed.hash = "";
+      found.add(parsed.href);
+    } catch {
+      // تجاهل الروابط غير الصالحة.
+    }
+  }
+  return [...found];
+}
+
+function ewdifhCompanyFromHtml(html, title) {
+  const org = String(html ?? "").match(/<a\b[^>]*href\s*=\s*["\'][^"\']*\/job\/org\/\d+[^"\']*["\'][^>]*>([\s\S]*?)<\/a>/i);
+  const fromOrg = clean(stripHtml(org?.[1] || ""));
+  if (fromOrg && fromOrg.length >= 2 && fromOrg.length <= 160) return fromOrg;
+  const fromTitle = clean(String(title || "").match(/^(.{2,120}?)\s+(?:تعلن|يعلن)\b/i)?.[1] || "");
+  return fromTitle || "الجهة المعلنة";
+}
+
+function ewdifhSector(company, title) {
+  const text = clean(company + " " + title);
+  if (/(?:الحرس\s+الملكي|الحرس\s+الوطني|وزارة\s+الدفاع|قوات\s+الدفاع|القوات\s+المسلحة|عسكري|التجنيد|جندي|جندي\s+أول)/i.test(text)) return "عسكري";
+  if (/^(?:وزارة|هيئة|جامعة|أمانة|رئاسة|صندوق|مركز\s+وطني|المؤسسة\s+العامة|ديوان)|مستشفى\s+الملك\s+فيصل/i.test(text)) return "حكومي";
+  return "خاص";
+}
+
+function ewdifhCity(text) {
+  const value = clean(text);
+  if (/جميع\s+مناطق\s+المملكة|عدة\s+مناطق\s+بالمملكة|مختلف\s+مناطق\s+المملكة/i.test(value)) return "مختلف مناطق المملكة";
+  const cities = ["الرياض","جدة","مكة المكرمة","مكة","المدينة المنورة","المدينة","الدمام","الخبر","الظهران","الجبيل","ينبع","الطائف","تبوك","أبها","خميس مشيط","جازان","نجران","حائل","بريدة","عنيزة","الباحة","سكاكا","عرعر","رأس الخير","بيشة","حقل","رابغ"];
+  return cities.find((city) => value.includes(city)) || null;
+}
+
+function ewdifhApplyUrl(html, baseUrl) {
+  const raw = String(html ?? "");
+  const positions = [raw.indexOf("طريقة التقديم"), raw.indexOf("رابط التقديم"), raw.indexOf("التقديم:")].filter((value) => value >= 0);
+  const start = positions.length ? Math.min(...positions) : -1;
+  const scopes = start >= 0 ? [raw.slice(start, Math.min(raw.length, start + 7000)), raw] : [raw];
+  for (const scope of scopes) {
+    const hrefRegex = /<a\b[^>]*href\s*=\s*["\']([^"\']+)["\'][^>]*>/gi;
+    let match;
+    while ((match = hrefRegex.exec(scope))) {
+      const url = absoluteUrl(match[1], baseUrl);
+      if (isTrustedDiscoveryApplyUrl(url)) return url;
+    }
+  }
+  return null;
+}
+
+function extractEwdifhJob(html, articleUrl) {
+  const visible = withoutScripts(html);
+  const text = stripHtml(visible);
+  const title = stripHtml((visible.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1]);
+  if (!title || title.length < 5) return null;
+
+  const employmentSignal = /(?:وظائف?|توظيف|فرص\s+وظيفية|شاغر|القبول\s+والتسجيل|منتهي(?:ة)?\s+بالتوظيف|مبتدئ(?:ة)?\s+بالتوظيف|تطوير\s+الخريجين|طاقم\s+الضيافة)/i.test(title);
+  const nonJobSignal = /(?:نتائج\s+القبول|دورة|دورات|ندوة|ورشة|ماجستير|دبلوم\s+تعليمي)/i.test(title) && !/(?:توظيف|منتهي(?:ة)?\s+بالتوظيف|مبتدئ(?:ة)?\s+بالتوظيف|تطوير\s+الخريجين)/i.test(title);
+  if (!employmentSignal || nonJobSignal) return null;
+
+  const applyUrl = ewdifhApplyUrl(visible, articleUrl);
+  if (!applyUrl) return null;
+  const articleId = String(new URL(articleUrl).pathname.match(/\/jobs\/(\d+)/i)?.[1] || "");
+  if (!articleId) return null;
+
+  const company = ewdifhCompanyFromHtml(visible, title);
+  const sector = ewdifhSector(company, title);
+  const city = ewdifhCity(text);
+  const dateMatch = text.match(/\b\d{1,2}-\d{1,2}-20\d{2}\b/);
+  const publishedAt = dateMatch ? parseDate(dateMatch[0]) : null;
+  if (publishedAt && daysSince(publishedAt) > 30) return null;
+
+  const remote = /عن\s*بُ?عد|عن\s+بعد/i.test(title + " " + text.slice(0, 2500));
+  const entry = inferEntryLevel({ title, description: text.slice(0, 2500), experience: "" });
+  const summary = "فرصة منشورة عبر «أي وظيفة» لدى " + company + ". ربط مَسعى زر التقديم بالرابط الخارجي المعلن للجهة، ويُنصح بمراجعة الشروط والمواعيد في صفحة الإعلان قبل التقديم.";
+
+  return {
+    external_id: articleId,
+    title: clean(title),
+    company,
+    sector,
+    city,
+    region: null,
+    work_mode: remote ? "عن بُعد" : null,
+    qualification: null,
+    specialization: null,
+    experience: null,
+    salary: null,
+    published_at: publishedAt,
+    expires_at: null,
+    summary,
+    source_url: articleUrl,
+    apply_url: applyUrl,
+    remote: remote ? 1 : 0,
+    fresh_graduate: entry.freshGraduate ? 1 : 0,
+    no_experience: entry.noExperience ? 1 : 0
+  };
+}
+
+async function syncEwdifhDiscoverySource(env, source = EWDIFH_SOURCE, maxArticles = 10) {
+  let listing;
+  try {
+    listing = await fetchPage(source.url, { attempts: 2 });
+  } catch (error) {
+    const message = clean(error?.message || error);
+    await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "error" }, source.sourceType);
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+  if (!listing.ok) {
+    const message = "تعذر الوصول إلى صفحة الاكتشاف برمز " + listing.status;
+    await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "error" }, source.sourceType);
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+
+  const articleUrls = discoverEwdifhArticleUrls(listing.text, listing.url || source.url);
+  const selected = articleUrls.slice(0, Math.max(1, Math.min(Number(maxArticles) || 10, 15)));
+  let added = 0;
+  let updated = 0;
+  let errors = 0;
+  let rejected = 0;
+
+  for (const articleUrl of selected) {
+    try {
+      const page = await fetchPage(articleUrl, { attempts: 1 });
+      if (!page.ok) { errors += 1; continue; }
+      const job = extractEwdifhJob(page.text, page.url || articleUrl);
+      if (!job) { rejected += 1; continue; }
+
+      const duplicateOfficial = await env.DB.prepare("SELECT id FROM jobs WHERE apply_url = ? AND source_key <> ? AND status = \'verified\' LIMIT 1")
+        .bind(job.apply_url, source.key).first();
+      if (duplicateOfficial) {
+        await setExistingJobStatus(env, source, job, "review");
+        continue;
+      }
+
+      const result = await saveJob(env, source, job, { skipLocalization: true, status: "discovered" });
+      if (result.added) added += 1;
+      if (result.updated) updated += 1;
+      if (result.rejected) rejected += 1;
+    } catch {
+      errors += 1;
+    }
+  }
+
+  await env.DB.prepare("UPDATE jobs SET status = \'review\', updated_at = ? WHERE source_key = ? AND status = \'discovered\' AND datetime(COALESCE(published_at, discovered_at)) < datetime(\'now\', \'-30 days\')")
+    .bind(nowIso(), source.key).run();
+
+  await upsertSource(env, source, {
+    success: errors === 0,
+    jobsSeen: articleUrls.length,
+    newJobs: added,
+    error: errors > 0 ? "تعذر فحص بعض إعلانات الاكتشاف." : null,
+    status: errors > 0 ? "partial" : "ok"
+  }, source.sourceType);
+
+  return { source: source.key, jobsSeen: articleUrls.length, checked: selected.length, added, updated, rejected, errors };
+}
+
+async function quarantineDiscoveryDuplicates(env) {
+  const sql = [
+    "UPDATE jobs",
+    "SET status = \'review\', updated_at = ?",
+    "WHERE source_key = \'ewdifh\'",
+    "AND status = \'discovered\'",
+    "AND EXISTS (",
+    "  SELECT 1 FROM jobs AS official",
+    "  WHERE official.apply_url = jobs.apply_url",
+    "    AND official.source_key <> \'ewdifh\'",
+    "    AND official.status = \'verified\'",
+    ")"
+  ].join(" ");
+  const result = await env.DB.prepare(sql).bind(nowIso()).run();
+  return Number(result.meta?.changes || 0);
+}
+
 function portalResponseStatus(status) {
   if (status >= 200 && status < 400) return "monitor_only";
   if (status === 401 || status === 403) return "restricted";
