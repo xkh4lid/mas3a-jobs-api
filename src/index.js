@@ -1176,7 +1176,12 @@ function extractMilitaryAnnouncement(html, source, url) {
     clean(decodeBasicEntities((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ["", ""])[1]));
 
   const focused = clean(title + " " + text.slice(0, 4500));
-  const hasRecruitmentSignal = /(?:فتح\s+باب|القبول\s+والتسجيل|بدء\s+(?:استقبال|التقديم|التسجيل)|التقديم\s+(?:متاح|على)|التسجيل\s+(?:متاح|للخدمة)|التجنيد|الالتحاق\s+بالخدمة\s+العسكرية|وظائف\s+عسكرية)/i.test(focused);
+
+  if (Array.isArray(source.excludeKeywords) && source.excludeKeywords.some((keyword) => focused.includes(keyword))) {
+    return null;
+  }
+
+  const hasRecruitmentSignal = /(?:فتح\s+باب|القبول\s+والتسجيل|القبول\s+الموحد|بدء\s+(?:استقبال|التقديم|التسجيل)|استقبال\s+طلبات|التقديم\s+(?:متاح|على)|التسجيل\s+(?:متاح|للخدمة)|التجنيد\s+الموحد|الالتحاق\s+بالخدمة\s+العسكرية|وظائف\s+عسكرية)/i.test(focused);
   if (!hasRecruitmentSignal || !source.keywords.some((keyword) => focused.includes(keyword))) return null;
 
   const applyUrl = findApplyUrl(html, source, url);
@@ -1204,12 +1209,25 @@ function extractMilitaryAnnouncement(html, source, url) {
   const summary = removeBoilerplate(summaryMatch?.[0] || text).slice(0, 650);
   const parsedUrl = new URL(url);
   const pathMatch = parsedUrl.pathname.match(/\/MONGNews\/([^/]+)\/Pages\/([^/.]+)/i);
-  const slug = pathMatch ? `${pathMatch[1]}-${pathMatch[2]}` : parsedUrl.pathname.split("/").filter(Boolean).pop()?.replace(/\.aspx$/i, "") || "announcement";
+  const spaMatch = parsedUrl.pathname.match(/^\/N(\d+)$/i);
+  const slug = pathMatch
+    ? pathMatch[1] + "-" + pathMatch[2]
+    : spaMatch
+      ? "N" + spaMatch[1]
+      : stableTextId(source.key, parsedUrl.href);
+
+  const company = /وزارة\s+الدفاع|القوات\s+المسلحة/i.test(focused)
+    ? "وزارة الدفاع"
+    : /وزارة\s+الداخلية|الإدارة\s+العامة\s+للقبول\s+المركزي|أبشر\s*-?\s*توظيف/i.test(focused)
+      ? "وزارة الداخلية"
+      : /الحرس\s+الوطني/i.test(focused)
+        ? "وزارة الحرس الوطني"
+        : source.company;
 
   return {
     external_id: slug,
     title: clean(title) || "فتح باب القبول والتسجيل للخدمة العسكرية",
-    company: source.company,
+    company,
     sector: "عسكري",
     city: /مختلف مناطق المملكة|جميع مناطق المملكة/.test(text) ? "مختلف مناطق المملكة" : null,
     region: null,
