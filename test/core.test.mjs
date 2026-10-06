@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   discoverJobUrls,
+  extractListingCandidates,
   pageExplicitlyHasNoJobs,
   externalIdFromUrl,
   normalizeDigits,
@@ -63,4 +64,28 @@ test("shards scheduled source syncs across five-minute slots", () => {
   assert.equal(scheduledSourceKeyForMinute(35), "alfanar");
   assert.equal(scheduledSourceKeyForMinute(40), "acwa-power");
   assert.equal(scheduledSourceKeyForMinute(45), "tasnee");
+});
+
+
+test("extracts official listing candidates without fetching every detail page", () => {
+  const source = {
+    key: "example",
+    host: "careers.example.sa",
+    company: "Example",
+    sector: "خاص",
+    listingUrls: ["https://careers.example.sa/search/?q=&locationsearch=SA"]
+  };
+  const html = `
+    <tr class="data-row">
+      <td><a href="/job/Riyadh-Data-Engineer/123456/">Data Engineer</a></td>
+      <td>Riyadh, Saudi Arabia</td>
+      <td>Oct 6, 2026</td>
+    </tr>
+  `;
+  const jobs = extractListingCandidates(html, source, source.listingUrls[0]);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].external_id, "123456");
+  assert.equal(jobs[0].title, "Data Engineer");
+  assert.equal(jobs[0].city, "الرياض");
+  assert.equal(jobs[0].published_at, "2026-10-06");
 });
