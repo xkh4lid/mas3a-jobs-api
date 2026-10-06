@@ -847,6 +847,9 @@ function isTrustedDiscoveryApplyUrl(value) {
     const host = url.hostname.toLowerCase();
     const blocked = [
       "ewdifh.com", "www.ewdifh.com",
+      "wadhefa.com", "www.wadhefa.com",
+      "wdeftksa.com", "www.wdeftksa.com",
+      "isaudinews.com", "www.isaudinews.com",
       "facebook.com", "www.facebook.com",
       "instagram.com", "www.instagram.com",
       "twitter.com", "www.twitter.com", "x.com", "www.x.com",
@@ -906,7 +909,7 @@ function validateJobCandidate(source, job) {
 
   if (!sourceHosts.has(sourceHost)) return { ok: false, reason: "untrusted_source_host" };
   if (source?.allowExternalApply === true) {
-    if (!isTrustedDiscoveryApplyUrl(job.apply_url)) {
+    if (!sourceHosts.has(applyHost) && !isTrustedDiscoveryApplyUrl(job.apply_url)) {
       return { ok: false, reason: "untrusted_apply_host" };
     }
   } else if (!sourceHosts.has(applyHost) && !applyHosts.has(applyHost)) {
@@ -1517,17 +1520,215 @@ async function syncEwdifhDiscoverySource(env, source = EWDIFH_SOURCE, maxArticle
   return { source: source.key, jobsSeen: articleUrls.length, checked: selected.length, added, updated, rejected, errors };
 }
 
+function discoverAdditionalArticleUrls(html, source, baseUrl) {
+  const found = new Set();
+  const normalized = normalizeListingHtml(html);
+  const hrefRegex = /<a\b[^>]*href\s*=\s*["\']([^"\']+)["\'][^>]*>/gi;
+  let match;
+  while ((match = hrefRegex.exec(normalized))) {
+    const url = absoluteUrl(match[1], baseUrl);
+    try {
+      const parsed = new URL(url);
+      const sourceHost = String(source.host || "").toLowerCase();
+      if (parsed.hostname.toLowerCase() !== sourceHost) continue;
+      source.articlePath.lastIndex = 0;
+      if (!source.articlePath.test(parsed.pathname)) continue;
+      parsed.hash = "";
+      found.add(parsed.href);
+    } catch {
+      // تجاهل الرابط غير الصالح.
+    }
+  }
+  return [...found];
+}
+
+function discoveryEmploymentTitle(title) {
+  const value = clean(title);
+  if (!value || value.length < 5 || value.length > 220) return false;
+  const good = /(?:وظائف?|توظيف|فرص\s+وظيفية|شاغر|القبول\s+والتسجيل|منتهي(?:ة)?\s+بالتوظيف|مبتدئ(?:ة)?\s+بالتوظيف|تطوير\s+الخريجين|طاقم\s+الضيافة|تمهير)/i.test(value);
+  const bad = /(?:نتائج\s+القبول|دورة|دورات|ندوة|ورشة|ماجستير|دبلوم\s+تعليمي|مواعيد\s+جامعة)/i.test(value)
+    && !/(?:توظيف|منتهي(?:ة)?\s+بالتوظيف|مبتدئ(?:ة)?\s+بالتوظيف|تطوير\s+الخريجين)/i.test(value);
+  return good && !bad;
+}
+
+function discoveryCompanyFromTitle(title) {
+  const value = clean(title);
+  const match = value.match(/^(.{2,120}?)\s+(?:تعلن|يعلن|تفتح|يفتح|توفر|يوفر)\b/i);
+  return clean(match?.[1] || "") || "الجهة المعلنة";
+}
+
+function discoveryPublishedDate(text) {
+  const value = clean(text);
+  const dmy = value.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]20\d{2}\b/);
+  if (dmy?.[0]) return parseDate(dmy[0]);
+  const iso = value.match(/\b20\d{2}-\d{2}-\d{2}\b/);
+  return iso?.[0] || null;
+}
+
+function listingOnlyDiscoveryJobs(html, source, baseUrl) {
+  const jobs = [];
+  const seen = new Set();
+  const normalized = normalizeListingHtml(html);
+  const anchorRegex = /<a\b[^>]*href\s*=\s*["\']([^"\']+)["\'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchorRegex.exec(normalized))) {
+    const url = absoluteUrl(match[1], baseUrl);
+    let parsed;
+    try { parsed = new URL(url); } catch { continue; }
+    if (parsed.hostname.toLowerCase() !== String(source.host || "").toLowerCase()) continue;
+    source.articlePath.lastIndex = 0;
+    if (!source.articlePath.test(parsed.pathname)) continue;
+    const title = clean(stripHtml(match[2] || ""));
+    if (!discoveryEmploymentTitle(title) || seen.has(parsed.href)) continue;
+    seen.add(parsed.href);
+    const id = parsed.pathname.match(/(\d+)/)?.[1] || stableTextId(source.key, parsed.href);
+    const company = discoveryCompanyFromTitle(title);
+    const sector = ewdifhSector(company, title);
+    const city = ewdifhCity(title);
+    jobs.push({
+      external_id: id,
+      title,
+      company,
+      sector,
+      city,
+      region: null,
+      work_mode: /عن\s*بُ?عد|عن\s+بعد/i.test(title) ? "عن بُعد" : null,
+      qualification: null,
+      specialization: null,
+      experience: null,
+      salary: null,
+      published_at: null,
+      expires_at: null,
+      summary: "فرصة منشورة عبر «" + source.company + "». افتح صفحة الإعلان لمراجعة المصدر وطريقة التقديم قبل إرسال الطلب.",
+      source_url: parsed.href,
+      apply_url: parsed.href,
+      remote: /عن\s*بُ?عد|عن\s+بعد/i.test(title) ? 1 : 0,
+      fresh_graduate: /حديثي\s+التخرج|تطوير\s+الخريجين|تمهير/i.test(title) ? 1 : 0,
+      no_experience: /بدون\s+خبرة|لا\s+تشترط\s+الخبرة/i.test(title) ? 1 : 0
+    });
+    if (jobs.length >= Math.max(1, Number(source.maxArticles) || 10)) break;
+  }
+  return jobs;
+}
+
+function extractAdditionalDiscoveryJob(html, source, articleUrl) {
+  const visible = withoutScripts(html);
+  const text = stripHtml(visible);
+  const title = stripHtml((visible.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1])
+    || clean(decodeBasicEntities((visible.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ["", ""])[1]));
+  if (!discoveryEmploymentTitle(title)) return null;
+
+  const parsed = new URL(articleUrl);
+  const id = parsed.pathname.match(/(\d+)/)?.[1] || stableTextId(source.key, parsed.href);
+  const company = discoveryCompanyFromTitle(title);
+  const sector = ewdifhSector(company, title);
+  const city = ewdifhCity(text);
+  const publishedAt = discoveryPublishedDate(text);
+  if (publishedAt && daysSince(publishedAt) > 30) return null;
+  const applyUrl = ewdifhApplyUrl(visible, articleUrl);
+  if (!applyUrl) return null;
+  const remote = /عن\s*بُ?عد|عن\s+بعد/i.test(title + " " + text.slice(0, 2000));
+  const entry = inferEntryLevel({ title, description: text.slice(0, 2500), experience: "" });
+
+  return {
+    external_id: id,
+    title: clean(title),
+    company,
+    sector,
+    city,
+    region: null,
+    work_mode: remote ? "عن بُعد" : null,
+    qualification: null,
+    specialization: null,
+    experience: null,
+    salary: null,
+    published_at: publishedAt,
+    expires_at: null,
+    summary: "فرصة منشورة عبر «" + source.company + "» لدى " + company + ". ربط مَسعى زر التقديم بالرابط الخارجي الموجود في الإعلان، وتبقى الجهة المعلنة هي المرجع النهائي.",
+    source_url: articleUrl,
+    apply_url: applyUrl,
+    remote: remote ? 1 : 0,
+    fresh_graduate: entry.freshGraduate ? 1 : 0,
+    no_experience: entry.noExperience ? 1 : 0
+  };
+}
+
+async function syncAdditionalDiscoverySource(env, source) {
+  let listing;
+  try {
+    listing = await fetchPage(source.url, { attempts: 2 });
+  } catch (error) {
+    const message = clean(error?.message || error);
+    await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "error" }, source.sourceType);
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+  if (!listing.ok) {
+    const message = "تعذر الوصول إلى مصدر الاكتشاف برمز " + listing.status;
+    await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "error" }, source.sourceType);
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+
+  let candidates = [];
+  let errors = 0;
+  let rejected = 0;
+  if (source.mode === "listing_only") {
+    candidates = listingOnlyDiscoveryJobs(listing.text, source, listing.url || source.url);
+  } else {
+    const urls = discoverAdditionalArticleUrls(listing.text, source, listing.url || source.url)
+      .slice(0, Math.max(1, Math.min(Number(source.maxArticles) || 5, 8)));
+    for (const articleUrl of urls) {
+      try {
+        const page = await fetchPage(articleUrl, { attempts: 1 });
+        if (!page.ok) { errors += 1; continue; }
+        const job = extractAdditionalDiscoveryJob(page.text, source, page.url || articleUrl);
+        if (job) candidates.push(job); else rejected += 1;
+      } catch {
+        errors += 1;
+      }
+    }
+  }
+
+  let added = 0;
+  let updated = 0;
+  for (const job of candidates) {
+    const duplicateOfficial = await env.DB.prepare("SELECT id FROM jobs WHERE apply_url = ? AND status = \'verified\' LIMIT 1")
+      .bind(job.apply_url).first();
+    if (duplicateOfficial) continue;
+    const result = await saveJob(env, source, job, { skipLocalization: true, status: "discovered" });
+    if (result.added) added += 1;
+    if (result.updated) updated += 1;
+    if (result.rejected) rejected += 1;
+  }
+
+  await env.DB.prepare("UPDATE jobs SET status = \'review\', updated_at = ? WHERE source_key = ? AND status = \'discovered\' AND datetime(COALESCE(published_at, discovered_at)) < datetime(\'now\', \'-30 days\')")
+    .bind(nowIso(), source.key).run();
+
+  const status = errors > 0 ? "partial" : "ok";
+  await upsertSource(env, source, {
+    success: errors === 0,
+    jobsSeen: candidates.length,
+    newJobs: added,
+    error: errors > 0 ? "تعذر فحص بعض إعلانات الاكتشاف." : null,
+    status
+  }, source.sourceType);
+
+  return { source: source.key, jobsSeen: candidates.length, added, updated, rejected, errors };
+}
+
 async function quarantineDiscoveryDuplicates(env) {
   const sql = [
     "UPDATE jobs",
     "SET status = \'review\', updated_at = ?",
-    "WHERE source_key = \'ewdifh\'",
-    "AND status = \'discovered\'",
+    "WHERE status = \'discovered\'",
     "AND EXISTS (",
-    "  SELECT 1 FROM jobs AS official",
-    "  WHERE official.apply_url = jobs.apply_url",
-    "    AND official.source_key <> \'ewdifh\'",
-    "    AND official.status = \'verified\'",
+    "  SELECT 1 FROM jobs AS other",
+    "  WHERE other.id <> jobs.id",
+    "    AND other.status IN (\'verified\',\'discovered\')",
+    "    AND (",
+    "      other.apply_url = jobs.apply_url",
+    "      OR (lower(trim(other.title)) = lower(trim(jobs.title)) AND lower(trim(other.company)) = lower(trim(jobs.company)))",
+    "    )",
+    "    AND (other.status = \'verified\' OR other.id < jobs.id)",
     ")"
   ].join(" ");
   const result = await env.DB.prepare(sql).bind(nowIso()).run();
