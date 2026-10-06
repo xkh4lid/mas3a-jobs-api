@@ -785,6 +785,29 @@ function configuredSourceHosts(source) {
   return { sourceHosts, applyHosts: new Set([...applyHosts].map((host) => host.toLowerCase())) };
 }
 
+function isTrustedDiscoveryApplyUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    const blocked = [
+      "ewdifh.com", "www.ewdifh.com",
+      "facebook.com", "www.facebook.com",
+      "instagram.com", "www.instagram.com",
+      "twitter.com", "www.twitter.com", "x.com", "www.x.com",
+      "t.me", "telegram.me", "www.telegram.me",
+      "whatsapp.com", "www.whatsapp.com", "api.whatsapp.com",
+      "apps.apple.com", "play.google.com",
+      "tiktok.com", "www.tiktok.com",
+      "googleadservices.com", "doubleclick.net",
+      "bit.ly", "tinyurl.com"
+    ];
+    return !blocked.some((blockedHost) => host === blockedHost || host.endsWith("." + blockedHost));
+  } catch {
+    return false;
+  }
+}
+
 function isAllowedOfficialUrl(value, source) {
   try {
     const url = new URL(value);
@@ -827,7 +850,11 @@ function validateJobCandidate(source, job) {
   }
 
   if (!sourceHosts.has(sourceHost)) return { ok: false, reason: "untrusted_source_host" };
-  if (!sourceHosts.has(applyHost) && !applyHosts.has(applyHost)) {
+  if (source?.allowExternalApply === true) {
+    if (!isTrustedDiscoveryApplyUrl(job.apply_url)) {
+      return { ok: false, reason: "untrusted_apply_host" };
+    }
+  } else if (!sourceHosts.has(applyHost) && !applyHosts.has(applyHost)) {
     return { ok: false, reason: "untrusted_apply_host" };
   }
 
@@ -1677,6 +1704,7 @@ async function quarantineStaleUnverifiedJobs(env) {
 }
 
 async function saveJob(env, source, rawJob, options = {}) {
+  const targetStatus = options.status === "discovered" ? "discovered" : "verified";
   if (!rawJob.title || !rawJob.apply_url) {
     return { added: false, updated: false, rejected: "missing_required_fields" };
   }
@@ -1731,9 +1759,9 @@ async function saveJob(env, source, rawJob, options = {}) {
 
   if (existing && existing.raw_hash === rawHash) {
     await env.DB.prepare(
-      `UPDATE jobs SET last_checked_at = ?, status = 'verified', fingerprint = ?, updated_at = ? WHERE id = ?`
+      `UPDATE jobs SET last_checked_at = ?, status = ?, fingerprint = ?, updated_at = ? WHERE id = ?`
     )
-      .bind(timestamp, fingerprint, timestamp, existing.id)
+      .bind(timestamp, targetStatus, fingerprint, timestamp, existing.id)
       .run();
 
     return { added: false, updated: false };
@@ -1757,7 +1785,7 @@ async function saveJob(env, source, rawJob, options = {}) {
         )
         VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, 'verified', ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?
         )
       `
     )
@@ -1786,6 +1814,7 @@ async function saveJob(env, source, rawJob, options = {}) {
         job.no_experience,
         timestamp,
         timestamp,
+        targetStatus,
         rawHash,
         timestamp
       )
@@ -1818,7 +1847,7 @@ async function saveJob(env, source, rawJob, options = {}) {
         fresh_graduate = ?,
         no_experience = ?,
         last_checked_at = ?,
-        status = 'verified',
+        status = ?,
         raw_hash = ?,
         updated_at = ?
       WHERE id = ?
@@ -1846,6 +1875,7 @@ async function saveJob(env, source, rawJob, options = {}) {
       job.fresh_graduate,
       job.no_experience,
       timestamp,
+      targetStatus,
       rawHash,
       timestamp,
       existing.id
