@@ -45,7 +45,7 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.aramco.com",
     listingUrls: [
-      "https://careers.aramco.com/saudi/go/For-Saudi-Applicants/7717723/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.aramco.com/saudi/search/?q=&locationsearch="
     ],
     searchUrls: [
       "https://careers.aramco.com/saudi/search/?q=&locationsearch="
@@ -237,7 +237,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.5.1";
+const VERSION = "3.5.2";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
