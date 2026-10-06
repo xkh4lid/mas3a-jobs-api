@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.33.0-channel-company-logo-cards";
+const VERSION = "3.34.0-telegram-growth-loop";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4487,6 +4487,18 @@ function isTelegramJoinUrl(value) {
   }
 }
 
+function telegramShareUrl(url, text = "") {
+  if (!isTelegramJoinUrl(url)) return "";
+  try {
+    const share = new URL("https://t.me/share/url");
+    share.searchParams.set("url", url);
+    if (clean(text)) share.searchParams.set("text", clean(text).slice(0, 700));
+    return share.href;
+  } catch {
+    return "";
+  }
+}
+
 async function resolveTelegramChannelUrl(env, { createIfMissing = true } = {}) {
   const configured = clean(env.TELEGRAM_CHANNEL_URL || "");
   if (isTelegramJoinUrl(configured)) return configured;
@@ -4580,7 +4592,7 @@ async function ensureTelegramCommands(env) {
 
 async function ensureTelegramChannelDiscoveryProfile(env) {
   await ensureTelegramStorage(env);
-  if (await telegramGetMeta(env, "channel_discovery_profile_v1")) {
+  if (await telegramGetMeta(env, "channel_discovery_profile_v2")) {
     return { ok: true, unchanged: true };
   }
 
@@ -4588,9 +4600,9 @@ async function ensureTelegramChannelDiscoveryProfile(env) {
   if (!channelId) return { ok: true, skipped: true, reason: "channel_not_connected" };
 
   const description = [
-    "مَسعى | وظائف سعودية",
-    "وظائف حكومية وعسكرية ووظائف شركات داخل السعودية من مصادرها الرسمية.",
-    "وظائف الرياض، جدة، الشرقية، عن بُعد، وحديثي التخرج مع روابط التقديم الأصلية."
+    "مَسعى وظائف | وظائف السعودية من مصادرها الرسمية.",
+    "حكومي • عسكري • شركات • عن بُعد • حديثي التخرج.",
+    "روابط التقديم الأصلية وبطاقات واضحة لكل فرصة."
   ].join("\n");
 
   const result = await telegramApi(env, "setChatDescription", {
@@ -4599,9 +4611,67 @@ async function ensureTelegramChannelDiscoveryProfile(env) {
   });
 
   if (result.ok) {
-    await telegramSetMeta(env, "channel_discovery_profile_v1", "1");
+    await telegramSetMeta(env, "channel_discovery_profile_v2", "1");
   }
   return result;
+}
+
+const TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY = "channel_growth_welcome_2026_10_v1";
+
+async function ensureTelegramChannelGrowthWelcome(env) {
+  await ensureTelegramStorage(env);
+  const existing = await telegramGetMeta(env, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY);
+  if (existing) return { ok: true, unchanged: true, message_id: existing };
+
+  const channelId = await resolveTelegramChannelId(env);
+  if (!channelId) return { ok: true, skipped: true, reason: "channel_not_connected" };
+
+  const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: true });
+  if (!channelUrl) return { ok: true, skipped: true, reason: "channel_link_not_ready" };
+
+  const shareUrl = telegramShareUrl(
+    channelUrl,
+    "📢 مَسعى وظائف — وظائف سعودية من مصادرها الرسمية\nحكومي • عسكري • شركات • عن بُعد • حديثي التخرج"
+  );
+
+  const keyboard = [
+    [{ text: "🔎 تصفح وظائف مَسعى", url: MASAA_SITE_URL }]
+  ];
+  if (shareUrl) keyboard.push([{ text: "↗️ شارك القناة مع شخص يبحث عن وظيفة", url: shareUrl }]);
+
+  const sent = await telegramApi(env, "sendMessage", {
+    chat_id: channelId,
+    text: [
+      "أهلًا بك في قناة مَسعى للوظائف 👋",
+      "",
+      "هنا ننشر الفرص الوظيفية بعد التحقق من مصدرها الأصلي قدر الإمكان، مع رابط التقديم الرسمي مباشرة.",
+      "",
+      "✅ وظائف حكومية",
+      "🛡️ وظائف عسكرية",
+      "🏢 وظائف شركات",
+      "🏠 وظائف عن بُعد",
+      "🎓 فرص حديثي التخرج",
+      "",
+      "فعّل إشعارات القناة حتى ما تفوتك الفرص الجديدة.",
+      "وإذا تعرف شخص يبحث عن وظيفة، شارك معه القناة 🤝"
+    ].join("\n"),
+    disable_web_page_preview: true,
+    disable_notification: true,
+    reply_markup: { inline_keyboard: keyboard }
+  });
+
+  if (!sent.ok) return sent;
+
+  const messageId = String(sent.result?.message_id || "");
+  if (messageId) {
+    await telegramApi(env, "pinChatMessage", {
+      chat_id: channelId,
+      message_id: Number(messageId),
+      disable_notification: true
+    });
+    await telegramSetMeta(env, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY, messageId);
+  }
+  return { ok: true, message_id: messageId };
 }
 
 function telegramStartText() {
@@ -5058,12 +5128,27 @@ function telegramJobCardUrl(env, job) {
 
 async function telegramSendChannelJob(env, channelId, job) {
   const applyUrl = telegramJobApplyUrl(job);
+  const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: true });
+  const shareUrl = channelUrl
+    ? telegramShareUrl(
+        channelUrl,
+        "💼 " + clean(job.title) + (clean(job.company) ? "\n🏢 " + clean(job.company) : "") +
+        "\n\nتابع مَسعى لوظائف السعودية الموثقة من المصدر الرسمي:"
+      )
+    : "";
+
   const buttons = [];
   if (applyUrl) buttons.push([{ text: "✅ التقديم من المصدر الرسمي", url: applyUrl }]);
-  buttons.push([{ text: "🔎 مَسعى وظائف", url: MASAA_SITE_URL }]);
 
-  // Image publishing is opt-in. If the renderer is unavailable or Telegram
-  // rejects the image, the existing text path remains the reliable fallback.
+  const discoveryRow = [];
+  if (channelUrl) discoveryRow.push({ text: "📢 قناة مَسعى", url: channelUrl });
+  discoveryRow.push({ text: "🔎 موقع مَسعى", url: MASAA_SITE_URL });
+  buttons.push(discoveryRow);
+
+  if (shareUrl) {
+    buttons.push([{ text: "↗️ شارك الوظيفة مع شخص يبحث عن عمل", url: shareUrl }]);
+  }
+
   const photo = telegramJobCardUrl(env, job);
   if (photo) {
     const caption = telegramChannelJobText(job);
@@ -5275,11 +5360,13 @@ async function telegramNotifySubscribers(env) {
 async function publishTelegramUpdates(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: true, skipped: true, reason: "token_not_configured" };
   await ensureTelegramStorage(env);
+  const welcome = await ensureTelegramChannelGrowthWelcome(env);
   const preview = await telegramPublishChannelIdentityPreviewOnce(env);
   const channel = await telegramPublishChannelUpdates(env);
   const subscribers = await telegramNotifySubscribers(env);
   return {
-    ok: preview.ok !== false && channel.ok !== false && subscribers.ok !== false,
+    ok: welcome.ok !== false && preview.ok !== false && channel.ok !== false && subscribers.ok !== false,
+    welcome,
     preview,
     channel,
     subscribers
@@ -5332,7 +5419,12 @@ async function handleTelegramWebhook(request, env) {
       [{ text: "💼 تصفح الوظائف", url: MASAA_SITE_URL }]
     ];
     if (channelUrl) {
+      const shareUrl = telegramShareUrl(
+        channelUrl,
+        "📢 مَسعى وظائف — وظائف السعودية من مصادرها الرسمية"
+      );
       keyboard.unshift([{ text: "📢 انضم لقناة مَسعى", url: channelUrl }]);
+      if (shareUrl) keyboard.push([{ text: "↗️ شارك قناة مَسعى", url: shareUrl }]);
     }
 
     const sent = await telegramApi(env, "sendMessage", {
@@ -5468,11 +5560,17 @@ async function handleRequest(request, env) {
       const channelId = await resolveTelegramChannelId(env);
       const channelUrl = await resolveTelegramChannelUrl(env, { createIfMissing: false });
       const subscriberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM telegram_subscribers WHERE alerts_enabled = 1").first();
+      let channelMembers = null;
+      if (channelId) {
+        const memberCountResult = await telegramApi(env, "getChatMemberCount", { chat_id: channelId });
+        if (memberCountResult.ok) channelMembers = Number(memberCountResult.result || 0);
+      }
       return json({
         ok: true,
         configured: Boolean(env.TELEGRAM_BOT_TOKEN),
         channel_connected: Boolean(channelId),
         channel_link_ready: Boolean(channelUrl),
+        channel_members: channelMembers,
         alerts_enabled_count: Number(subscriberCount?.count || 0),
         webhook_path: TELEGRAM_WEBHOOK_PATH
       }, env, 200, { "Cache-Control": "no-store" });
@@ -5608,7 +5706,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {
