@@ -51,3 +51,13 @@ test("discovers encoded SuccessFactors job URLs from official hosts", () => {
 test("does not treat generic careers pages as confirmed empty listings", () => {
   assert.equal(pageExplicitlyHasNoJobs("<h1>Careers</h1><p>Search our opportunities</p>"), false);
 });
+
+
+test("discovers official job URLs with query-string requisition IDs", () => {
+  const html = '<a href="/jobs/search/?jobId=987654">query job</a>';
+  assert.deepEqual(discoverJobUrls(html, sf, sf.listingUrls[0]), ["https://careers.example.sa/jobs/search/?jobId=987654"]);
+});
+
+test("extracts external IDs from official query-string job URLs", () => {
+  assert.equal(externalIdFromUrl("https://careers.example.sa/jobs/search/?requisitionId=7654321"), "7654321");
+});
