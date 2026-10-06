@@ -406,7 +406,7 @@ const CATCHUP_SOURCE_ORDER = [...SCHEDULED_SOURCE_ORDER];
 
 async function verifiedJobCount(env) {
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM jobs WHERE status IN ('verified','discovered')"
+    "SELECT COUNT(*) AS count FROM jobs WHERE status = 'verified'"
   ).first();
   return Number(row?.count || 0);
 }
@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.15.0";
+const VERSION = "3.15.1";
 const LOCALIZATION_VERSION = "ar-v6";
 const nowIso = () => new Date().toISOString();
 
@@ -3477,10 +3477,10 @@ async function listJobs(request, env) {
     )
   )`);
   if (includeExpiredDays > 0) {
-    where.push(`(status IN ('verified','discovered') OR (status = 'expired' AND date(COALESCE(expires_at, updated_at)) >= date('now', ?)))`);
+    where.push(`(status = 'verified' OR (status = 'expired' AND date(COALESCE(expires_at, updated_at)) >= date('now', ?)))`);
     values.push(`-${includeExpiredDays} days`);
   } else {
-    where.push("status IN ('verified','discovered')");
+    where.push("status = 'verified'");
   }
 
   if (q) {
@@ -3638,7 +3638,7 @@ async function stats(env) {
         SUM(CASE WHEN status = 'discovered' THEN 1 ELSE 0 END) AS discovered,
         COUNT(DISTINCT company) AS active_companies
       FROM jobs
-      WHERE status IN ('verified','discovered')
+      WHERE status = 'verified'
         AND NOT (
           source_key = 'sang-military'
           AND (
@@ -3670,7 +3670,7 @@ async function stats(env) {
 
 async function getJobById(id, env) {
   const job = await env.DB.prepare(
-    `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status IN ('verified','discovered') LIMIT 1`
+    `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
   ).bind(id).first();
   if (!job) return { ok: false, error: "غير موجود" };
   if (job.source_key === "sang-military") {
@@ -3684,7 +3684,7 @@ async function sitemapJobs(env) {
   const result = await env.DB.prepare(
     `SELECT id, updated_at
      FROM jobs
-     WHERE status IN ('verified','discovered')
+     WHERE status = 'verified'
        AND NOT (
          source_key = 'sang-military'
          AND (
