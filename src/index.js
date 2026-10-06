@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.15.1";
+const VERSION = "3.15.2";
 const LOCALIZATION_VERSION = "ar-v6";
 const nowIso = () => new Date().toISOString();
 
@@ -2143,7 +2143,7 @@ async function quarantineStaleUnverifiedJobs(env) {
 }
 
 async function saveJob(env, source, rawJob, options = {}) {
-  const targetStatus = options.status === "discovered" ? "discovered" : "verified";
+  const requestedStatus = options.status === "discovered" ? "discovered" : "verified";
   if (!rawJob.title || !rawJob.apply_url) {
     return { added: false, updated: false, rejected: "missing_required_fields" };
   }
@@ -2197,10 +2197,18 @@ async function saveJob(env, source, rawJob, options = {}) {
   const timestamp = nowIso();
 
   if (existing && existing.raw_hash === rawHash) {
+    const stored = await env.DB.prepare(
+      `SELECT title, source_url FROM jobs WHERE id = ? LIMIT 1`
+    ).bind(existing.id).first();
+
+    const finalStatus = requestedStatus === "verified" && isPublicJobReady(stored)
+      ? "verified"
+      : "discovered";
+
     await env.DB.prepare(
       `UPDATE jobs SET last_checked_at = ?, status = ?, fingerprint = ?, updated_at = ? WHERE id = ?`
     )
-      .bind(timestamp, targetStatus, fingerprint, timestamp, existing.id)
+      .bind(timestamp, finalStatus, fingerprint, timestamp, existing.id)
       .run();
 
     return { added: false, updated: false };
@@ -2209,6 +2217,10 @@ async function saveJob(env, source, rawJob, options = {}) {
   const job = options.skipLocalization
     ? { ...rawJob, company: source.companyAr || rawJob.company }
     : await localizeJob(env, source, rawJob);
+
+  const targetStatus = requestedStatus === "verified" && isPublicJobReady(job)
+    ? "verified"
+    : "discovered";
 
   if (!existing) {
     const id = rawJob.external_id ? `${source.key}-${rawJob.external_id}` : crypto.randomUUID();
@@ -2933,7 +2945,7 @@ async function syncListingSnapshotSource(env, source, maxNewJobs = 60) {
 
   for (const job of candidates.values()) {
     if (added >= cap) break;
-    const result = await saveJob(env, source, job, { skipLocalization: true });
+    const result = await saveJob(env, source, job, { skipLocalization: true, status: "discovered" });
     if (result.added) added += 1;
     if (result.updated) updated += 1;
     if (result.rejected) rejected += 1;
@@ -3424,6 +3436,26 @@ function sourceArabicCompany(sourceKey, currentCompany) {
   return arabicPublicText(source?.companyAr || source?.company || currentCompany, "الجهة المعلنة", 180);
 }
 
+function isPublicJobReady(row) {
+  const title = clean(row?.title);
+  const sourceUrl = clean(row?.source_url);
+
+  if (!title || title.length < 3) return false;
+  if (!/[ء-ي]/.test(title)) return false;
+  if (/^فرصة وظيفية لدى\b/.test(title)) return false;
+
+  // Known bad literal translations from the legacy translation model.
+  if (/\/Staff-Scientist-Viral-Vector-Facility\//i.test(sourceUrl) && /مستشفى\s+العلماء|فيرول/i.test(title)) {
+    return false;
+  }
+
+  if (/\/Events-Coordinator\//i.test(sourceUrl) && /^مراقبة\s+الأحداث$/i.test(title)) {
+    return false;
+  }
+
+  return true;
+}
+
 function publicArabicJob(row) {
   const company = sourceArabicCompany(row.source_key, row.company);
   const normalizedCity = normalizeCity(row.city);
@@ -3469,6 +3501,11 @@ async function listJobs(request, env) {
 
   const where = [];
   const values = [];
+  where.push("title IS NOT NULL AND length(trim(title)) >= 3");
+  where.push("title GLOB '*[ء-ي]*'");
+  where.push("title NOT LIKE 'فرصة وظيفية لدى %'");
+  where.push("NOT (source_url LIKE '%/Staff-Scientist-Viral-Vector-Facility/%' AND (title LIKE '%مستشفى العلماء%' OR title LIKE '%فيرول%'))");
+  where.push("NOT (source_url LIKE '%/Events-Coordinator/%' AND title = 'مراقبة الأحداث')");
   where.push(`NOT (
     source_key = 'sang-military'
     AND (
@@ -3672,7 +3709,7 @@ async function getJobById(id, env) {
   const job = await env.DB.prepare(
     `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
   ).bind(id).first();
-  if (!job) return { ok: false, error: "غير موجود" };
+  if (!job || !isPublicJobReady(job)) return { ok: false, error: "غير موجود" };
   if (job.source_key === "sang-military") {
     const allowed = /^https:\/\/(?:jobs\.sang\.gov\.sa|jobs\.sa)\//i.test(String(job.apply_url || ""));
     if (!allowed) return { ok: false, error: "غير موجود" };
@@ -3682,7 +3719,7 @@ async function getJobById(id, env) {
 
 async function sitemapJobs(env) {
   const result = await env.DB.prepare(
-    `SELECT id, updated_at
+    `SELECT id, updated_at, title, source_url
      FROM jobs
      WHERE status = 'verified'
        AND NOT (
@@ -3695,7 +3732,10 @@ async function sitemapJobs(env) {
      ORDER BY COALESCE(updated_at, discovered_at) DESC
      LIMIT 5000`
   ).all();
-  return { ok: true, jobs: result.results || [] };
+  return {
+    ok: true,
+    jobs: (result.results || []).filter(isPublicJobReady)
+  };
 }
 
 function secureEqual(a, b) {
