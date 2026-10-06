@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   discoverJobUrls,
+  discoverCategoryUrls,
   pageExplicitlyHasNoJobs,
   externalIdFromUrl,
   normalizeDigits,
@@ -40,4 +41,10 @@ test("rejects non-HTTPS and non-official application URLs", () => {
 test("creates stable IDs for title-based official listings", () => {
   assert.equal(stableTextId("moh-current", "إعلان طبي ١"), stableTextId("moh-current", "إعلان طبي ١"));
   assert.notEqual(stableTextId("moh-current", "إعلان طبي ١"), stableTextId("moh-current", "إعلان طبي ٢"));
+});
+
+
+test("discovers bounded official SuccessFactors category URLs for fallback crawling", () => {
+  const html = '<a href="/go/Operations/7741123/">ops</a><a href="https://evil.example/go/Fake/99999/">bad</a>';
+  assert.deepEqual(discoverCategoryUrls(html, sf, sf.listingUrls[0]), ["https://careers.example.sa/go/Operations/7741123/"]);
 });
