@@ -175,9 +175,10 @@ test("renders a safe dynamic Telegram SVG job card", () => {
   assert.doesNotMatch(svg, /<اختبار>/);
   assert.match(svg, /التقديم من المصدر الرسمي/);
   assert.match(svg, /متحقق من المصدر الرسمي/);
-  assert.match(svg, /fill="#0F6B4F"/);
-  assert.match(svg, /fill="#F6B744"/);
-  assert.match(svg, /translate\(816\.00,28\.00\)/);
+  assert.match(svg, /id="masaaMint"/);
+  assert.match(svg, /id="masaaGold"/);
+  assert.match(svg, /fill="url\(#masaaBg\)"/);
+  assert.match(svg, /translate\(250\.00,18\.00\)/);
 });
 
 
@@ -215,5 +216,5 @@ test("wraps long Telegram job titles without overflowing the card", () => {
 test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
   const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
   assert.equal(url.searchParams.get("job"), "job-123");
-  assert.equal(url.searchParams.get("v"), "3.31.1-telegram-card-cache-bust");
+  assert.equal(url.searchParams.get("v"), "3.32.0-masaa-identity-card");
 });
