@@ -296,7 +296,23 @@ function successFactorsSourceByKey(key) {
   return SUCCESSFACTORS_SOURCES.find((source) => source.key === key) || null;
 }
 
-const VERSION = "3.8.0";
+const CATCHUP_TARGET_JOBS = 60;
+const CATCHUP_SOURCE_ORDER = ["alfanar", "acwa-power", "tasnee"];
+
+async function verifiedJobCount(env) {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM jobs WHERE status = 'verified'"
+  ).first();
+  return Number(row?.count || 0);
+}
+
+function catchupSourceKeyForMinute(minute) {
+  const safeMinute = Math.max(0, Math.min(59, Number(minute) || 0));
+  const slot = Math.floor(safeMinute / 5);
+  return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
+}
+
+const VERSION = "3.8.1";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -2789,7 +2805,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute };
+export { discoverJobUrls, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute };
 
 export default {
   async fetch(request, env) {
@@ -2803,6 +2819,12 @@ export default {
     }
 
     const minute = new Date(controller.scheduledTime).getUTCMinutes();
-    ctx.waitUntil(runSourceBatch(env, scheduledSourceKeyForMinute(minute)));
+    ctx.waitUntil((async () => {
+      const totalJobs = await verifiedJobCount(env);
+      const sourceKey = totalJobs < CATCHUP_TARGET_JOBS
+        ? catchupSourceKeyForMinute(minute)
+        : scheduledSourceKeyForMinute(minute);
+      return runSourceBatch(env, sourceKey);
+    })());
   }
 };
