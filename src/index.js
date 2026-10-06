@@ -870,6 +870,7 @@ function normalizeCity(value) {
     .replace(/^self\.location\s*;?$/i, "");
 
   if (!city) return null;
+  if (containsEnglishUiNoise(city) || city.length > 120) return null;
 
   const compactCode = city.replace(/\s+/g, "").toUpperCase();
   if (/^SA(?:[,;:/_-]?\d+)*$/.test(compactCode)) return "السعودية";
@@ -907,6 +908,16 @@ function normalizeCity(value) {
 
 function isArabic(value) {
   return /[\u0600-\u06FF]/.test(String(value ?? ""));
+}
+
+function normalizeWorkMode(value, remote = false) {
+  if (remote) return "عن بُعد";
+  const mode = clean(value);
+  if (!mode) return null;
+  if (/عن بُعد|عن بعد|العمل من المنزل/.test(mode) || /\b(?:remote|work from home)\b/i.test(mode)) return "عن بُعد";
+  if (/هجين/.test(mode) || /\bhybrid\b/i.test(mode)) return "هجين";
+  if (/حضوري|من مقر العمل/.test(mode) || /\b(?:on[- ]?site|onsite|office)\b/i.test(mode)) return "حضوري";
+  return arabicPublicText(mode, null, 80);
 }
 
 function explicitRemoteFlag({ title, city, workMode, description }) {
@@ -1318,8 +1329,8 @@ async function localizeJob(env, source, job) {
   localized.experience = arabicPublicText(experience || job.experience, null, 350);
   localized.qualification = arabicPublicText(qualification || job.qualification, null, 450);
   localized.specialization = arabicPublicText(job.specialization, isArabic(job.specialization) ? job.specialization : null, 180);
-  localized.city = arabicPublicText(normalizeCity(job.city), "السعودية", 120);
-  localized.work_mode = job.remote ? "عن بُعد" : arabicPublicText(job.work_mode, job.work_mode ? "حضوري" : null, 80);
+  localized.city = arabicPublicText(normalizeCity(job.city), "غير محددة", 120);
+  localized.work_mode = normalizeWorkMode(job.work_mode, Boolean(job.remote));
   return localized;
 }
 
@@ -2493,9 +2504,9 @@ function publicArabicJob(row) {
     ...row,
     title: arabicPublicText(row.title, "فرصة وظيفية لدى " + company, 220),
     company,
-    city: arabicPublicText(normalizedCity, "السعودية", 120),
+    city: arabicPublicText(normalizedCity, "غير محددة", 120),
     region: arabicPublicText(row.region, null, 120),
-    work_mode: row.remote ? "عن بُعد" : arabicPublicText(row.work_mode, row.work_mode ? "حضوري" : null, 80),
+    work_mode: normalizeWorkMode(row.work_mode, Boolean(row.remote)),
     qualification: arabicPublicText(row.qualification, null, 450),
     specialization: arabicPublicText(row.specialization, null, 180),
     experience: arabicPublicText(row.experience, null, 350),
@@ -2634,6 +2645,7 @@ async function listSources(env) {
       name: arabicPublicText(source.name, "مصدر رسمي", 180),
       status_label: statusLabels[source.status] || "حالة غير محددة",
       source_type_label: typeLabels[source.source_type] || "مصدر رسمي",
+      last_error: source.last_error ? "تعذر إكمال آخر فحص للمصدر، وسيعاد الفحص تلقائيًا." : null,
       last_error_ar: source.last_error ? "تعذر إكمال آخر فحص للمصدر، وسيعاد الفحص تلقائيًا." : null
     }))
   };
