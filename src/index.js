@@ -340,7 +340,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.11.0";
+const VERSION = "3.12.0";
 const LOCALIZATION_VERSION = "ar-v5";
 const nowIso = () => new Date().toISOString();
 
@@ -2727,7 +2727,7 @@ async function runSupportBatch(env) {
     results.push(result);
   }
 
-  for (const source of MILITARY_NEWS_SOURCES) {
+  for (const source of MILITARY_NEWS_SOURCES.filter((item) => !item.rapid)) {
     const result = await syncMilitaryNewsSource(env, source);
     sourcesChecked += 1;
     jobsSeen += result.jobsSeen || 0;
@@ -3364,7 +3364,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute };
 
 export default {
   async fetch(request, env) {
