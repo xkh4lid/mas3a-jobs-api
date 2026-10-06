@@ -237,7 +237,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.5.3";
+const VERSION = "3.5.4";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -938,7 +938,7 @@ function portalResponseStatus(status) {
 
 async function syncPortalMonitorSource(env, source) {
   try {
-    const page = await fetchPage(source.url, { attempts: 3 });
+    const page = await fetchPage(source.url, { attempts: 1 });
     const status = portalResponseStatus(page.status);
     const reachable = status !== "error";
 
