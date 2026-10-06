@@ -135,3 +135,21 @@ test("accepts a SPA recruitment announcement only with an official apply link", 
   assert.equal(job.company, "وزارة الداخلية");
   assert.equal(job.apply_url, "https://jobs.sa/");
 });
+
+
+test("rejects incomplete Arabic job titles that end with dangling connectors", () => {
+  assert.equal(isIncompleteArabicJobTitle("متخصصة في أمن المرضى و"), true);
+  assert.equal(isIncompleteArabicJobTitle("مدير تطوير الأعمال في"), true);
+  assert.equal(isIncompleteArabicJobTitle("أخصائي إدارة المخاطر وسلامة المرضى"), false);
+});
+
+test("repairs known JHAH patient safety titles from the official job URL", () => {
+  assert.equal(
+    jobTitleOverrideFromUrl("https://careers.jhah.com/job/Dhahran-ERM-&-PATIENT-SAFETY-SPECIALIST_/1368463323/"),
+    "أخصائي إدارة المخاطر وسلامة المرضى"
+  );
+  assert.equal(
+    jobTitleOverrideFromUrl("https://careers.jhah.com/job/Dhahran-ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_/857146123/"),
+    "أخصائي مشارك في إدارة المخاطر وسلامة المرضى"
+  );
+});
