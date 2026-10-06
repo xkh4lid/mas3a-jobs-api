@@ -898,10 +898,7 @@ function normalizeCity(value) {
 
   for (const [english, arabic] of map.entries()) {
     if (english === "SA") continue;
-    const escaped = english.replace(/[.*+?^$()|[\]\\]/g, "\\  return map.get(city) || city;
-}
-
-function isArabic(value) {");
+    const escaped = english.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
     if (new RegExp("(?:^|[,\\s-])" + escaped + "(?:$|[,\\s-])", "i").test(city)) return arabic;
   }
 
