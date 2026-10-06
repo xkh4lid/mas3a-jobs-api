@@ -1,9 +1,9 @@
 const SUCCESSFACTORS_SOURCES = [
   {
     key: "stc",
-    name: "stc Careers",
+    name: "وظائف إس تي سي",
     company: "stc",
-    companyAr: "stc",
+    companyAr: "إس تي سي",
     sector: "خاص",
     host: "careers.stc.com.sa",
     listingUrls: [
@@ -13,7 +13,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "kaust",
-    name: "KAUST Careers",
+    name: "وظائف جامعة الملك عبدالله للعلوم والتقنية",
     company: "King Abdullah University of Science & Technology",
     companyAr: "جامعة الملك عبدالله للعلوم والتقنية",
     sector: "خاص",
@@ -25,7 +25,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "saudia",
-    name: "Saudia Group Careers",
+    name: "وظائف مجموعة السعودية",
     company: "Saudia Group",
     companyAr: "مجموعة السعودية",
     sector: "خاص",
@@ -39,7 +39,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "aramco",
-    name: "Saudi Aramco Careers",
+    name: "وظائف أرامكو السعودية",
     company: "Saudi Aramco",
     companyAr: "أرامكو السعودية",
     sector: "خاص",
@@ -53,7 +53,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "acwa-power",
-    name: "ACWA Power Careers",
+    name: "وظائف أكوا باور",
     company: "ACWA Power",
     companyAr: "أكوا باور",
     sector: "خاص",
@@ -67,7 +67,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "spimaco",
-    name: "SPIMACO Careers",
+    name: "وظائف سبيماكو الدوائية",
     company: "SPIMACO",
     companyAr: "سبيماكو الدوائية",
     sector: "خاص",
@@ -81,7 +81,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "sab",
-    name: "Saudi Awwal Bank Careers",
+    name: "وظائف البنك السعودي الأول",
     company: "Saudi Awwal Bank",
     companyAr: "البنك السعودي الأول",
     sector: "خاص",
@@ -95,7 +95,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "jhah",
-    name: "Johns Hopkins Aramco Healthcare Careers",
+    name: "وظائف جونز هوبكنز أرامكو للرعاية الصحية",
     company: "Johns Hopkins Aramco Healthcare",
     companyAr: "جونز هوبكنز أرامكو للرعاية الصحية",
     sector: "خاص",
@@ -109,7 +109,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "sipchem",
-    name: "SIPCHEM Careers",
+    name: "وظائف سبكيم",
     company: "SIPCHEM",
     companyAr: "سبكيم",
     sector: "خاص",
@@ -120,7 +120,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "alfanar",
-    name: "alfanar Careers",
+    name: "وظائف الفنار",
     company: "alfanar",
     companyAr: "الفنار",
     sector: "خاص",
@@ -134,7 +134,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "sasref",
-    name: "SASREF Careers",
+    name: "وظائف ساسرف",
     company: "Saudi Aramco Jubail Refinery Company (SASREF)",
     companyAr: "ساسرف",
     sector: "خاص",
@@ -146,7 +146,7 @@ const SUCCESSFACTORS_SOURCES = [
   },
   {
     key: "tasnee",
-    name: "Tasnee Careers",
+    name: "وظائف التصنيع",
     company: "National Industrialization Company (Tasnee)",
     companyAr: "التصنيع",
     sector: "خاص",
@@ -312,8 +312,8 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.8.1";
-const LOCALIZATION_VERSION = "ar-v4";
+const VERSION = "3.9.0";
+const LOCALIZATION_VERSION = "ar-v5";
 const nowIso = () => new Date().toISOString();
 
 const clean = (value) =>
@@ -773,12 +773,50 @@ function removeBoilerplate(value) {
     String(value ?? "")
       .replace(/Skip to main content/gi, " ")
       .replace(/Home Professional Life at KAUST[\s\S]*?Search by Keyword/gi, " ")
+      .replace(/Show More Options/gi, " ")
+      .replace(/Loading\.{0,3}/gi, " ")
       .replace(/Select how often \(in days\) to receive an alert:?/gi, " ")
+      .replace(/(?:how often \(in days\) to )?receive an alert:?/gi, " ")
       .replace(/Create Alert/gi, " ")
+      .replace(/Search by Keyword/gi, " ")
+      .replace(/Search by Location/gi, " ")
+      .replace(/Search Jobs/gi, " ")
+      .replace(/View All Jobs/gi, " ")
       .replace(/Apply now\s*»?/gi, " ")
       .replace(/Find similar jobs/gi, " ")
       .replace(/View Profile/gi, " ")
+      .replace(/\bCategory\b/gi, " ")
+      .replace(/\bClear\b/gi, " ")
+      .replace(/\bAll\b/gi, " ")
   );
+}
+
+function containsEnglishUiNoise(value) {
+  return /(?:show more options|loading\.{0,3}|select how often|receive an alert|create alert|search by keyword|search by location|find similar jobs|view profile)/i
+    .test(String(value ?? ""));
+}
+
+function hasLatinWords(value) {
+  return /[A-Za-z]{2,}/.test(String(value ?? ""));
+}
+
+function stripResidualLatin(value) {
+  return clean(
+    String(value ?? "")
+      .replace(/\b[A-Za-z][A-Za-z0-9+.#/&\'’\-]*\b/g, " ")
+      .replace(/\(\s*\)/g, " ")
+      .replace(/\s+([،؛:,.!?])/g, "$1")
+  );
+}
+
+function arabicPublicText(value, fallback = null, maxLength = 900) {
+  const cleaned = removeBoilerplate(value).slice(0, maxLength);
+  if (!cleaned) return fallback;
+  if (!hasLatinWords(cleaned)) return cleaned;
+
+  const stripped = stripResidualLatin(cleaned).slice(0, maxLength);
+  if (isArabic(stripped) && stripped.length >= 3) return stripped;
+  return fallback;
 }
 
 function extractSection(text, startMarkers, stopMarkers, maxLength = 900) {
@@ -821,7 +859,8 @@ function extractDescription(html) {
     .replace(/^.*?(?:Company\s*:?\s*[^.]{1,120})/i, "")
     .slice(0, 700);
 
-  return fallback.length >= 35 ? fallback : null;
+  if (fallback.length < 35 || containsEnglishUiNoise(fallback)) return null;
+  return fallback;
 }
 
 function normalizeCity(value) {
@@ -831,6 +870,9 @@ function normalizeCity(value) {
     .replace(/^self\.location\s*;?$/i, "");
 
   if (!city) return null;
+
+  const compactCode = city.replace(/\s+/g, "").toUpperCase();
+  if (/^SA(?:[,;:/_-]?\d+)*$/.test(compactCode)) return "السعودية";
 
   const map = new Map([
     ["SA", "السعودية"],
@@ -852,7 +894,18 @@ function normalizeCity(value) {
     ["Najran", "نجران"]
   ]);
 
-  return map.get(city) || city;
+  if (map.has(city)) return map.get(city);
+
+  for (const [english, arabic] of map.entries()) {
+    if (english === "SA") continue;
+    const escaped = english.replace(/[.*+?^$()|[\]\\]/g, "\\  return map.get(city) || city;
+}
+
+function isArabic(value) {");
+    if (new RegExp("(?:^|[,\\s-])" + escaped + "(?:$|[,\\s-])", "i").test(city)) return arabic;
+  }
+
+  return city;
 }
 
 function isArabic(value) {
@@ -1195,8 +1248,14 @@ async function fetchText(url, options = {}) {
 }
 
 async function translateToArabic(env, value, maxLength = 900) {
-  const text = clean(value).slice(0, maxLength);
-  if (!text || isArabic(text) || !env.AI) return text || null;
+  const text = removeBoilerplate(value).slice(0, maxLength);
+  if (!text) return null;
+  if (!hasLatinWords(text)) return text;
+
+  if (!env.AI) {
+    const stripped = stripResidualLatin(text);
+    return isArabic(stripped) ? stripped : null;
+  }
 
   try {
     const response = await env.AI.run("@cf/meta/m2m100-1.2b", {
@@ -1205,7 +1264,7 @@ async function translateToArabic(env, value, maxLength = 900) {
       target_lang: "arabic"
     });
 
-    const translated = clean(
+    const translated = removeBoilerplate(
       response?.translated_text ||
       response?.translation ||
       response?.result?.translated_text ||
@@ -1214,9 +1273,13 @@ async function translateToArabic(env, value, maxLength = 900) {
       ""
     );
 
-    return translated || text;
+    if (!translated) return null;
+    if (!hasLatinWords(translated)) return translated;
+    const stripped = stripResidualLatin(translated);
+    return isArabic(stripped) ? stripped : null;
   } catch {
-    return text;
+    const stripped = stripResidualLatin(text);
+    return isArabic(stripped) ? stripped : null;
   }
 }
 
@@ -1247,10 +1310,19 @@ async function localizeJob(env, source, job) {
     translateToArabic(env, job.qualification, 450)
   ]);
 
-  localized.title = title || job.title;
-  localized.summary = summary || job.summary;
-  localized.experience = experience || job.experience;
-  localized.qualification = qualification || job.qualification;
+  const companyArabic = arabicPublicText(localized.company, "الجهة المعلنة", 180);
+  localized.company = companyArabic;
+  localized.title = arabicPublicText(title || job.title, "فرصة وظيفية لدى " + companyArabic, 220);
+  localized.summary = arabicPublicText(
+    summary || job.summary,
+    "فرصة وظيفية لدى " + companyArabic + ". راجع المصدر الرسمي للاطلاع على الوصف الكامل والمتطلبات وطريقة التقديم.",
+    700
+  );
+  localized.experience = arabicPublicText(experience || job.experience, null, 350);
+  localized.qualification = arabicPublicText(qualification || job.qualification, null, 450);
+  localized.specialization = arabicPublicText(job.specialization, isArabic(job.specialization) ? job.specialization : null, 180);
+  localized.city = arabicPublicText(normalizeCity(job.city), "السعودية", 120);
+  localized.work_mode = job.remote ? "عن بُعد" : arabicPublicText(job.work_mode, job.work_mode ? "حضوري" : null, 80);
   return localized;
 }
 
@@ -2410,6 +2482,34 @@ function parseBoolean(value) {
   return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
 }
 
+function sourceArabicCompany(sourceKey, currentCompany) {
+  const source = SUCCESSFACTORS_SOURCES.find((item) => item.key === sourceKey)
+    || MILITARY_NEWS_SOURCES.find((item) => item.key === sourceKey)
+    || OFFICIAL_LISTING_SOURCES.find((item) => item.key === sourceKey);
+  return arabicPublicText(source?.companyAr || source?.company || currentCompany, "الجهة المعلنة", 180);
+}
+
+function publicArabicJob(row) {
+  const company = sourceArabicCompany(row.source_key, row.company);
+  const normalizedCity = normalizeCity(row.city);
+  return {
+    ...row,
+    title: arabicPublicText(row.title, "فرصة وظيفية لدى " + company, 220),
+    company,
+    city: arabicPublicText(normalizedCity, "السعودية", 120),
+    region: arabicPublicText(row.region, null, 120),
+    work_mode: row.remote ? "عن بُعد" : arabicPublicText(row.work_mode, row.work_mode ? "حضوري" : null, 80),
+    qualification: arabicPublicText(row.qualification, null, 450),
+    specialization: arabicPublicText(row.specialization, null, 180),
+    experience: arabicPublicText(row.experience, null, 350),
+    summary: arabicPublicText(
+      row.summary,
+      "فرصة وظيفية لدى " + company + ". راجع المصدر الرسمي للاطلاع على الوصف الكامل والمتطلبات وطريقة التقديم.",
+      700
+    )
+  };
+}
+
 async function listJobs(request, env) {
   const url = new URL(request.url);
   const q = clean(url.searchParams.get("q")).slice(0, 120);
@@ -2499,7 +2599,7 @@ async function listJobs(request, env) {
     has_more: offset + (result.results?.length || 0) < total,
     limit,
     offset,
-    jobs: result.results || []
+    jobs: (result.results || []).map(publicArabicJob)
   };
 }
 
@@ -2516,7 +2616,30 @@ async function listSources(env) {
     `
   ).all();
 
-  return { ok: true, sources: result.results || [] };
+  const statusLabels = {
+    ok: "يعمل بشكل طبيعي",
+    pending: "بانتظار أول فحص",
+    monitor_only: "تحت المراقبة",
+    restricted: "الوصول مقيد",
+    needs_review: "يحتاج مراجعة للموصل",
+    error: "تعذر الفحص"
+  };
+  const typeLabels = {
+    successfactors: "بوابة توظيف رسمية",
+    official_news: "إعلانات رسمية",
+    official_portal_monitor: "بوابة رسمية تحت المراقبة",
+    official_listing: "قائمة وظائف رسمية"
+  };
+  return {
+    ok: true,
+    sources: (result.results || []).map((source) => ({
+      ...source,
+      name: arabicPublicText(source.name, "مصدر رسمي", 180),
+      status_label: statusLabels[source.status] || "حالة غير محددة",
+      source_type_label: typeLabels[source.source_type] || "مصدر رسمي",
+      last_error_ar: source.last_error ? "تعذر إكمال آخر فحص للمصدر، وسيعاد الفحص تلقائيًا." : null
+    }))
+  };
 }
 
 async function stats(env) {
@@ -2560,7 +2683,7 @@ async function getJobById(id, env) {
   const job = await env.DB.prepare(
     `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
   ).bind(id).first();
-  return job ? { ok: true, job } : { ok: false, error: "Not found" };
+  return job ? { ok: true, job: publicArabicJob(job) } : { ok: false, error: "غير موجود" };
 }
 
 async function sitemapJobs(env) {
