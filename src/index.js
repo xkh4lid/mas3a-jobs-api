@@ -216,6 +216,51 @@ const EWDIFH_SOURCE = {
   allowExternalApply: true
 };
 
+const ADDITIONAL_DISCOVERY_SOURCES = [
+  {
+    key: "wadhefa-com",
+    name: "وظيفة.كوم — مصدر اكتشاف",
+    company: "وظيفة.كوم",
+    sector: "متعدد",
+    host: "www.wadhefa.com",
+    url: "https://www.wadhefa.com/",
+    listingUrls: ["https://www.wadhefa.com/"],
+    sourceType: "discovery_feed",
+    articlePath: /^\/news\/\d+\/?$/i,
+    mode: "listing_only",
+    maxArticles: 10,
+    allowExternalApply: true
+  },
+  {
+    key: "wdeftksa",
+    name: "وظيفتك علينا — مصدر اكتشاف",
+    company: "وظيفتك علينا",
+    sector: "متعدد",
+    host: "www.wdeftksa.com",
+    url: "https://www.wdeftksa.com/sa/jobs",
+    listingUrls: ["https://www.wdeftksa.com/sa/jobs"],
+    sourceType: "discovery_feed",
+    articlePath: /^\/sa\/jobs\/\d+\/?$/i,
+    mode: "detail",
+    maxArticles: 5,
+    allowExternalApply: true
+  },
+  {
+    key: "isaudinews",
+    name: "سعودي نيوز — مصدر اكتشاف",
+    company: "سعودي نيوز",
+    sector: "متعدد",
+    host: "isaudinews.com",
+    url: "https://isaudinews.com/",
+    listingUrls: ["https://isaudinews.com/"],
+    sourceType: "discovery_feed",
+    articlePath: /^\/\d+\/?$/i,
+    mode: "detail",
+    maxArticles: 5,
+    allowExternalApply: true
+  }
+];
+
 const SOURCE_CATALOG = [
   ...SUCCESSFACTORS_SOURCES.map((source) => ({
     key: source.key,
@@ -296,7 +341,17 @@ const SOURCE_CATALOG = [
     enabled: 1,
     supported: 1,
     status: "pending"
-  }
+  },
+  ...ADDITIONAL_DISCOVERY_SOURCES.map((source) => ({
+    key: source.key,
+    name: source.name,
+    url: source.url,
+    source_type: source.sourceType,
+    sector: source.sector,
+    enabled: 1,
+    supported: 1,
+    status: "pending"
+  }))
 
 ];
 
@@ -362,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.13.0";
+const VERSION = "3.14.0";
 const LOCALIZATION_VERSION = "ar-v6";
 const nowIso = () => new Date().toISOString();
 
