@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.27.0-telegram-growth-funnel";
+const VERSION = "3.28.0-telegram-job-card-experiment";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4754,11 +4754,39 @@ async function telegramMarkDelivered(env, jobId, target) {
     .bind(String(jobId), String(target), nowIso()).run();
 }
 
+function telegramJobCardUrl(env, job) {
+  const base = clean(env.TELEGRAM_JOB_CARD_BASE_URL || "");
+  if (!base || !job?.id) return "";
+  try {
+    const url = new URL(base);
+    url.searchParams.set("job", String(job.id));
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
 async function telegramSendChannelJob(env, channelId, job) {
   const applyUrl = telegramJobApplyUrl(job);
   const buttons = [];
   if (applyUrl) buttons.push([{ text: "✅ التقديم من المصدر الرسمي", url: applyUrl }]);
   buttons.push([{ text: "🔎 مَسعى وظائف", url: MASAA_SITE_URL }]);
+
+  // Image publishing is opt-in. If the renderer is unavailable or Telegram
+  // rejects the image, the existing text path remains the reliable fallback.
+  const photo = telegramJobCardUrl(env, job);
+  if (photo) {
+    const caption = telegramChannelJobText(job);
+    const imageResult = await telegramApi(env, "sendPhoto", {
+      chat_id: channelId,
+      photo,
+      caption: caption.length <= 1024 ? caption : caption.slice(0, 1021) + "...",
+      reply_markup: { inline_keyboard: buttons }
+    });
+    if (imageResult.ok) return imageResult;
+    console.error("mas3a_telegram_job_card_fallback", clean(imageResult.error || imageResult.status || "sendPhoto_failed"));
+  }
+
   return telegramApi(env, "sendMessage", {
     chat_id: channelId,
     text: telegramChannelJobText(job),
