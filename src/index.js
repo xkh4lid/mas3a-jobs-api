@@ -351,7 +351,7 @@ const CATCHUP_SOURCE_ORDER = [...SCHEDULED_SOURCE_ORDER];
 
 async function verifiedJobCount(env) {
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM jobs WHERE status = 'verified'"
+    "SELECT COUNT(*) AS count FROM jobs WHERE status IN ('verified','discovered')"
   ).first();
   return Number(row?.count || 0);
 }
@@ -2802,6 +2802,18 @@ async function runCatchupListingBatch(env, target = CATCHUP_TARGET_JOBS) {
     results.push(result);
   }
 
+  if (needed > 0) {
+    const discoveryResult = await syncEwdifhDiscoverySource(env, EWDIFH_SOURCE, Math.min(needed, 10));
+    sourcesChecked += 1;
+    jobsSeen += discoveryResult.jobsSeen || 0;
+    jobsAdded += discoveryResult.added || 0;
+    jobsUpdated += discoveryResult.updated || 0;
+    errors += discoveryResult.errors || 0;
+    needed -= discoveryResult.added || 0;
+    results.push(discoveryResult);
+  }
+
+  await quarantineDiscoveryDuplicates(env);
   const summary = { sourcesChecked, jobsSeen, jobsAdded, jobsUpdated, errors };
   const finishedAt = await finishSyncRun(env, runId, summary);
   const total = await verifiedJobCount(env);
@@ -2972,6 +2984,15 @@ async function runSupportBatch(env) {
     results.push(result);
   }
 
+  const discoveryResult = await syncEwdifhDiscoverySource(env, EWDIFH_SOURCE, 10);
+  sourcesChecked += 1;
+  jobsSeen += discoveryResult.jobsSeen || 0;
+  jobsAdded += discoveryResult.added || 0;
+  jobsUpdated += discoveryResult.updated || 0;
+  errors += discoveryResult.errors || 0;
+  results.push(discoveryResult);
+
+  const discoveryDuplicates = await quarantineDiscoveryDuplicates(env);
   const quarantinedStaleJobs = await quarantineStaleUnverifiedJobs(env);
   await dedupeExistingJobs(env);
 
@@ -2989,6 +3010,7 @@ async function runSupportBatch(env) {
     jobs_updated: jobsUpdated,
     errors,
     monitor_warnings: monitorWarnings,
+    discovery_duplicates_hidden: discoveryDuplicates,
     quarantined_stale_jobs: quarantinedStaleJobs,
     results
   };
@@ -2996,6 +3018,11 @@ async function runSupportBatch(env) {
 
 async function runSync(env, options = {}) {
   const sourceKey = clean(options.sourceKey || "");
+  if (sourceKey === "ewdifh") {
+    const result = await syncEwdifhDiscoverySource(env, EWDIFH_SOURCE, 10);
+    await quarantineDiscoveryDuplicates(env);
+    return { ok: (result.errors || 0) === 0, mode: "discovery_source", result };
+  }
   if (sourceKey) return runSourceBatch(env, sourceKey);
   return runSourceBatch(env, scheduledSourceKeyForMinute(new Date().getUTCMinutes()));
 }
