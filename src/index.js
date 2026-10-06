@@ -417,8 +417,8 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.18.0-marketing";
-const LOCALIZATION_VERSION = "ar-v7-title";
+const VERSION = "3.18.1-title-quality";
+const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
 const clean = (value) =>
@@ -1168,6 +1168,7 @@ function normalizeCity(value) {
     .replace(/^self\.location\s*;?$/i, "");
 
   if (!city) return null;
+  if (/^(?:غير محددة|غير محدد|غير معروف(?:ة)?)$/i.test(city)) return null;
   if (containsEnglishUiNoise(city) || city.length > 120) return null;
 
   const compactCode = city.replace(/\s+/g, "").toUpperCase();
@@ -2098,9 +2099,14 @@ async function translateToArabic(env, value, maxLength = 900) {
 }
 
 async function translateJobTitleToArabic(env, source, job) {
+  const officialOverride = jobTitleOverrideFromUrl(job?.source_url || job?.apply_url);
+  if (officialOverride) return officialOverride;
+
   const rawTitle = removeBoilerplate(job?.title || titleFromJobUrl(job?.apply_url || job?.source_url)).slice(0, 220);
   if (!rawTitle) return null;
-  if (!hasLatinWords(rawTitle) && isArabic(rawTitle)) return rawTitle;
+  if (!hasLatinWords(rawTitle) && isArabic(rawTitle)) {
+    return isIncompleteArabicJobTitle(rawTitle) ? null : rawTitle;
+  }
 
   if (env.AI) {
     try {
@@ -2108,7 +2114,7 @@ async function translateJobTitleToArabic(env, source, job) {
         messages: [
           {
             role: "system",
-            content: "أنت مترجم مسميات وظيفية محترف. ترجم المسمى الوظيفي فقط إلى عربية مهنية طبيعية ومختصرة. لا تضف شرحًا أو اسم الجهة أو المدينة. لا تترجم Facility إلى مستشفى إلا إذا كان السياق طبيًا فعلًا. حوّل الاختصارات التقنية إلى معنى عربي واضح أو اكتبها بحروف عربية عند الحاجة. لا تخترع معلومات. أخرج المسمى فقط في سطر واحد وبدون علامات اقتباس."
+            content: "أنت مترجم مسميات وظيفية محترف. ترجم المسمى الوظيفي فقط إلى عربية مهنية طبيعية ومختصرة. لا تضف شرحًا أو اسم الجهة أو المدينة. لا تترجم Facility إلى مستشفى إلا إذا كان السياق طبيًا فعلًا. حوّل الاختصارات التقنية إلى معنى عربي واضح أو اكتبها بحروف عربية عند الحاجة. لا تخترع معلومات. يجب أن يكون المسمى كاملاً نحويًا ولا ينتهي بحرف عطف أو حرف جر مثل «و» أو «في». أخرج المسمى فقط في سطر واحد وبدون علامات اقتباس."
           },
           {
             role: "user",
@@ -2132,15 +2138,54 @@ async function translateJobTitleToArabic(env, source, job) {
         .split(/\r?\n/)[0]
         .slice(0, 220);
 
-      if (generated && isArabic(generated) && !/^فرصة وظيفية لدى\b/.test(generated)) {
+      if (
+        generated &&
+        isArabic(generated) &&
+        !/^فرصة وظيفية لدى\b/.test(generated) &&
+        !isIncompleteArabicJobTitle(generated)
+      ) {
         return generated;
+      }
+
+      if (generated && isIncompleteArabicJobTitle(generated)) {
+        const retry = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+          messages: [
+            {
+              role: "system",
+              content: "أعد صياغة المسمى الوظيفي العربي كاملاً اعتمادًا على المسمى الإنجليزي الأصلي. لا تختصر آخر الكلمات ولا تترك حرف عطف أو حرف جر في النهاية. أخرج المسمى فقط."
+            },
+            {
+              role: "user",
+              content: "المسمى الأصلي: " + rawTitle
+            }
+          ],
+          max_tokens: 80,
+          temperature: 0.05
+        });
+
+        const repaired = clean(
+          retry?.response ||
+          retry?.result?.response ||
+          retry?.output_text ||
+          retry?.result?.output_text ||
+          retry?.choices?.[0]?.message?.content ||
+          ""
+        )
+          .replace(/^["'«»]+|["'«»]+$/g, "")
+          .split(/\r?\n/)[0]
+          .slice(0, 220);
+
+        if (repaired && isArabic(repaired) && !isIncompleteArabicJobTitle(repaired)) {
+          return repaired;
+        }
       }
     } catch {
       // Fall back to the translation model below.
     }
   }
 
-  return translateToArabic(env, rawTitle, 220);
+  const fallback = await translateToArabic(env, rawTitle, 220);
+  return fallback && !isIncompleteArabicJobTitle(fallback) ? fallback : null;
 }
 
 async function localizeJob(env, source, job) {
@@ -2181,7 +2226,7 @@ async function localizeJob(env, source, job) {
   localized.experience = arabicPublicText(experience || job.experience, null, 350);
   localized.qualification = arabicPublicText(qualification || job.qualification, null, 450);
   localized.specialization = arabicPublicText(job.specialization, isArabic(job.specialization) ? job.specialization : null, 180);
-  localized.city = arabicPublicText(normalizeCity(job.city), "غير محددة", 120);
+  localized.city = arabicPublicText(normalizeCity(job.city), null, 120);
   localized.work_mode = normalizeWorkMode(job.work_mode, Boolean(job.remote));
   return localized;
 }
@@ -3624,13 +3669,39 @@ function sourceArabicCompany(sourceKey, currentCompany) {
   return arabicPublicText(source?.companyAr || source?.company || currentCompany, "الجهة المعلنة", 180);
 }
 
+function isIncompleteArabicJobTitle(value) {
+  const title = clean(value)
+    .replace(/[\s.،؛:!?؟\-–—]+$/g, "")
+    .trim();
+
+  if (!title || title.length < 3) return true;
+
+  // A professional title should not end with a dangling conjunction/preposition.
+  return /(?:^|\s)(?:و|أو|في|من|إلى|الى|على|عن|مع|لدى|ضمن|بين|ثم|حتى)$/u.test(title);
+}
+
+function jobTitleOverrideFromUrl(value) {
+  const url = clean(value);
+
+  if (/\/ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_?\//i.test(url)) {
+    return "أخصائي مشارك في إدارة المخاطر وسلامة المرضى";
+  }
+
+  if (/\/ERM-&-PATIENT-SAFETY-SPECIALIST_?\//i.test(url)) {
+    return "أخصائي إدارة المخاطر وسلامة المرضى";
+  }
+
+  return null;
+}
+
 function isPublicJobReady(row) {
-  const title = clean(row?.title);
   const sourceUrl = clean(row?.source_url);
+  const title = jobTitleOverrideFromUrl(sourceUrl) || clean(row?.title);
 
   if (!title || title.length < 3) return false;
   if (!/[ء-ي]/.test(title)) return false;
   if (/^فرصة وظيفية لدى\b/.test(title)) return false;
+  if (isIncompleteArabicJobTitle(title)) return false;
 
   // Known bad literal translations from the legacy translation model.
   if (/\/Staff-Scientist-Viral-Vector-Facility\//i.test(sourceUrl) && /مستشفى\s+العلماء|فيرول/i.test(title)) {
@@ -3647,11 +3718,17 @@ function isPublicJobReady(row) {
 function publicArabicJob(row) {
   const company = sourceArabicCompany(row.source_key, row.company);
   const normalizedCity = normalizeCity(row.city);
+  const city = /^(?:غير محددة|غير محدد|غير معروف(?:ة)?)$/i.test(clean(normalizedCity))
+    ? null
+    : arabicPublicText(normalizedCity, null, 120);
+  const title = jobTitleOverrideFromUrl(row.source_url)
+    || arabicPublicText(row.title, null, 220);
+
   return {
     ...row,
-    title: arabicPublicText(row.title, "فرصة وظيفية لدى " + company, 220),
+    title,
     company,
-    city: arabicPublicText(normalizedCity, "غير محددة", 120),
+    city,
     region: arabicPublicText(row.region, null, 120),
     work_mode: normalizeWorkMode(row.work_mode, Boolean(row.remote)),
     qualification: containsCookieNoise(row.qualification) ? null : arabicPublicText(row.qualification, null, 450),
@@ -3768,14 +3845,16 @@ async function listJobs(request, env) {
     .bind(...values, limit, offset)
     .all();
 
+  const publicRows = (result.results || []).filter(isPublicJobReady);
+
   return {
     ok: true,
-    count: result.results?.length || 0,
+    count: publicRows.length,
     total,
     has_more: offset + (result.results?.length || 0) < total,
     limit,
     offset,
-    jobs: (result.results || []).map(publicArabicJob)
+    jobs: publicRows.map(publicArabicJob)
   };
 }
 
