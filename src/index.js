@@ -3167,9 +3167,13 @@ function publicArabicJob(row) {
     experience: containsCookieNoise(row.experience) ? null : arabicPublicText(row.experience, null, 350),
     summary: arabicPublicText(
       containsCookieNoise(row.summary) ? null : row.summary,
-      "فرصة وظيفية لدى " + company + ". راجع المصدر الرسمي للاطلاع على الوصف الكامل والمتطلبات وطريقة التقديم.",
+      "فرصة وظيفية لدى " + company + ". راجع رابط التقديم للاطلاع على التفاصيل والمتطلبات.",
       700
-    )
+    ),
+    verification_level: row.source_key === "ewdifh" || row.status === "discovered" ? "discovery" : "official",
+    verification_label: row.source_key === "ewdifh" || row.status === "discovered"
+      ? "اكتشاف عبر أي وظيفة — رابط التقديم لدى الجهة"
+      : "متحقق من المصدر الرسمي"
   };
 }
 
@@ -3196,10 +3200,10 @@ async function listJobs(request, env) {
     )
   )`);
   if (includeExpiredDays > 0) {
-    where.push(`(status = 'verified' OR (status = 'expired' AND date(COALESCE(expires_at, updated_at)) >= date('now', ?)))`);
+    where.push(`(status IN ('verified','discovered') OR (status = 'expired' AND date(COALESCE(expires_at, updated_at)) >= date('now', ?)))`);
     values.push(`-${includeExpiredDays} days`);
   } else {
-    where.push("status = 'verified'");
+    where.push("status IN ('verified','discovered')");
   }
 
   if (q) {
@@ -3299,7 +3303,8 @@ async function listSources(env) {
     successfactors: "بوابة توظيف رسمية",
     official_news: "إعلانات رسمية",
     official_portal_monitor: "بوابة رسمية تحت المراقبة",
-    official_listing: "قائمة وظائف رسمية"
+    official_listing: "قائمة وظائف رسمية",
+    discovery_feed: "مصدر اكتشاف للوظائف"
   };
   return {
     ok: true,
@@ -3325,10 +3330,11 @@ async function stats(env) {
         SUM(CASE WHEN sector = 'حكومي' THEN 1 ELSE 0 END) AS government,
         SUM(CASE WHEN sector = 'عسكري' THEN 1 ELSE 0 END) AS military,
         SUM(CASE WHEN sector = 'خاص' THEN 1 ELSE 0 END) AS private,
-        SUM(CASE WHEN date(updated_at) = date('now') THEN 1 ELSE 0 END) AS verified_today,
+        SUM(CASE WHEN status = 'verified' AND date(updated_at) = date('now') THEN 1 ELSE 0 END) AS verified_today,
+        SUM(CASE WHEN status = 'discovered' THEN 1 ELSE 0 END) AS discovered,
         COUNT(DISTINCT company) AS active_companies
       FROM jobs
-      WHERE status = 'verified'
+      WHERE status IN ('verified','discovered')
         AND NOT (
           source_key = 'sang-military'
           AND (
@@ -3360,7 +3366,7 @@ async function stats(env) {
 
 async function getJobById(id, env) {
   const job = await env.DB.prepare(
-    `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
+    `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status IN ('verified','discovered') LIMIT 1`
   ).bind(id).first();
   if (!job) return { ok: false, error: "غير موجود" };
   if (job.source_key === "sang-military") {
@@ -3374,7 +3380,7 @@ async function sitemapJobs(env) {
   const result = await env.DB.prepare(
     `SELECT id, updated_at
      FROM jobs
-     WHERE status = 'verified'
+     WHERE status IN ('verified','discovered')
        AND NOT (
          source_key = 'sang-military'
          AND (
