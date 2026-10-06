@@ -12,7 +12,9 @@ import {
   isAllowedOfficialUrl,
   stableTextId,
   successFactorsSearchUrls,
-  scheduledSourceKeyForMinute
+  scheduledSourceKeyForMinute,
+  isIncompleteArabicJobTitle,
+  jobTitleOverrideFromUrl
 } from "../src/index.js";
 
 const sf = { host: "careers.example.sa", listingUrls: ["https://careers.example.sa/viewalljobs/"] };
