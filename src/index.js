@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.32.1-channel-identity-preview";
+const VERSION = "3.33.0-channel-company-logo-cards";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4805,6 +4805,44 @@ function jobCardLines(value, maxChars = 31, maxLines = 2) {
   return lines.slice(0, maxLines);
 }
 
+const TELEGRAM_LOGO_EXCLUDED_HOSTS = new Set([
+  "ewdifh.com",
+  "wadhefa.com",
+  "wdeftksa.com",
+  "isaudinews.com",
+  "linkedin.com",
+  "www.linkedin.com",
+  "indeed.com",
+  "www.indeed.com",
+  "smartrecruiters.com",
+  "www.smartrecruiters.com",
+  "greenhouse.io",
+  "boards.greenhouse.io",
+  "lever.co",
+  "jobs.lever.co"
+]);
+
+function telegramNormalizeLogoDomain(value) {
+  const raw = clean(value).toLowerCase().replace(/^www\./, "");
+  if (!raw || !/^[a-z0-9.-]+$/.test(raw)) return "";
+  if (TELEGRAM_LOGO_EXCLUDED_HOSTS.has(raw)) return "";
+  if (raw.endsWith(".myworkdayjobs.com")) return "";
+  if (raw.includes("successfactors.")) return "";
+  if (raw.endsWith(".oraclecloud.com")) return "";
+  if (raw.endsWith(".smartrecruiters.com")) return "";
+  if (raw.endsWith(".greenhouse.io")) return "";
+  if (raw.endsWith(".lever.co")) return "";
+  return raw.replace(/^(?:careers?|jobs?|recruitment)\./, "");
+}
+
+function telegramLogoDomainFromUrl(value) {
+  try {
+    return telegramNormalizeLogoDomain(new URL(value).hostname);
+  } catch {
+    return "";
+  }
+}
+
 function telegramCompanyDomain(job) {
   const sourceKey = clean(job?.source_key).toLowerCase();
   const company = clean(job?.company).toLowerCase();
@@ -4823,16 +4861,25 @@ function telegramCompanyDomain(job) {
     "sasref": "sasref.com.sa",
     "tasnee": "tasnee.com",
     "moh-jobs": "moh.gov.sa",
+    "sang-jobs": "sang.gov.sa",
     "sang-military": "sang.gov.sa",
     "mod-tajnid": "mod.gov.sa",
-    "absher-military": "jobs.sa"
+    "absher-military": "jobs.sa",
+    "jadarat": "jadarat.sa"
   };
 
   if (bySource[sourceKey]) return bySource[sourceKey];
+
+  const source = typeof successFactorsSourceByKey === "function" ? successFactorsSourceByKey(sourceKey) : null;
+  const sourceDomain = telegramNormalizeLogoDomain(source?.host || "");
+  if (sourceDomain) return sourceDomain;
+
   if (company.includes("وزارة الدفاع")) return "mod.gov.sa";
   if (company.includes("وزارة الداخلية")) return "moi.gov.sa";
   if (company.includes("الحرس الوطني")) return "sang.gov.sa";
   if (company.includes("وزارة الصحة")) return "moh.gov.sa";
+  if (company.includes("وزارة التعليم")) return "moe.gov.sa";
+  if (company.includes("وزارة الطاقة")) return "moenergy.gov.sa";
   if (company.includes("أرامكو") || company.includes("aramco")) return "aramco.com";
   if (company.includes("أكوا") || company.includes("acwa")) return "acwapower.com";
   if (company.includes("stc") || company.includes("إس تي سي")) return "stc.com.sa";
@@ -4841,16 +4888,41 @@ function telegramCompanyDomain(job) {
   if (company.includes("الراجحي") || company.includes("rajhi")) return "alrajhibank.com.sa";
   if (company.includes("الكهرباء") || company.includes("electric")) return "se.com.sa";
 
-  for (const candidate of [job?.apply_url, job?.source_url]) {
-    try {
-      const host = new URL(candidate).hostname.toLowerCase().replace(/^www\./, "");
-      if (!host || ["ewdifh.com", "wadhefa.com", "wdeftksa.com", "isaudinews.com"].includes(host)) continue;
-      return host.replace(/^(?:careers?|jobs?)\./, "");
-    } catch {
-      // Ignore malformed source URLs.
-    }
+  const catalogSource = SOURCE_CATALOG.find((entry) => entry.key === sourceKey);
+  for (const candidate of [catalogSource?.url, job?.apply_url, job?.source_url]) {
+    const domain = telegramLogoDomainFromUrl(candidate);
+    if (domain) return domain;
   }
   return "";
+}
+
+function telegramCompanyLogoCandidateUrls(domain) {
+  const safeDomain = telegramNormalizeLogoDomain(domain);
+  if (!safeDomain) return [];
+  const homepage = "https://" + safeDomain;
+  return [
+    homepage + "/apple-touch-icon.png",
+    homepage + "/favicon-192x192.png",
+    homepage + "/favicon.png",
+    "https://www.google.com/s2/favicons?domain_url=" + encodeURIComponent(homepage) + "&sz=256"
+  ];
+}
+
+async function telegramImageDataUri(url) {
+  try {
+    const response = await fetch(url, {
+      redirect: "follow",
+      headers: { "User-Agent": "MasaaJobs/1.0" }
+    });
+    if (!response.ok) return "";
+    const contentType = clean(response.headers.get("Content-Type")).split(";")[0].toLowerCase();
+    if (!["image/png", "image/jpeg"].includes(contentType)) return "";
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength < 128 || bytes.byteLength > 786432) return "";
+    return "data:" + contentType + ";base64," + bytesToBase64(bytes);
+  } catch {
+    return "";
+  }
 }
 
 function bytesToBase64(bytes) {
@@ -4884,18 +4956,12 @@ async function telegramCardFontBytes() {
 async function telegramCompanyLogoDataUri(job) {
   const domain = telegramCompanyDomain(job);
   if (!domain) return "";
-  try {
-    const url = "https://www.google.com/s2/favicons?domain=" + encodeURIComponent(domain) + "&sz=128";
-    const response = await fetch(url, { headers: { "User-Agent": "MasaaJobs/1.0" } });
-    if (!response.ok) return "";
-    const contentType = clean(response.headers.get("Content-Type")).split(";")[0].toLowerCase();
-    if (!["image/png", "image/jpeg"].includes(contentType)) return "";
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (!bytes.byteLength || bytes.byteLength > 512000) return "";
-    return "data:" + contentType + ";base64," + bytesToBase64(bytes);
-  } catch {
-    return "";
+
+  for (const url of telegramCompanyLogoCandidateUrls(domain)) {
+    const dataUri = await telegramImageDataUri(url);
+    if (dataUri) return dataUri;
   }
+  return "";
 }
 
 function telegramJobCardSvg(job, logoDataUri = "") {
@@ -5542,7 +5608,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramJobCardUrl, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY };
 
 export default {
   async fetch(request, env) {

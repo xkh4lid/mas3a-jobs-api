@@ -17,6 +17,7 @@ import {
   jobTitleOverrideFromUrl,
   telegramJobCardSvg,
   telegramCompanyDomain,
+  telegramCompanyLogoCandidateUrls,
   telegramJobCardUrl,
   TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY
 } from "../src/index.js";
@@ -217,7 +218,7 @@ test("wraps long Telegram job titles without overflowing the card", () => {
 test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
   const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
   assert.equal(url.searchParams.get("job"), "job-123");
-  assert.equal(url.searchParams.get("v"), "3.32.1-channel-identity-preview");
+  assert.equal(url.searchParams.get("v"), "3.33.0-channel-company-logo-cards");
 });
 
 
@@ -225,5 +226,28 @@ test("uses a fixed one-time Telegram channel preview marker", () => {
   assert.equal(
     TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY,
     "channel_identity_preview_2026_10_07_v1"
+  );
+});
+
+
+test("builds high-quality official logo candidates before Google favicon fallback", () => {
+  assert.deepEqual(
+    telegramCompanyLogoCandidateUrls("example.sa"),
+    [
+      "https://example.sa/apple-touch-icon.png",
+      "https://example.sa/favicon-192x192.png",
+      "https://example.sa/favicon.png",
+      "https://www.google.com/s2/favicons?domain_url=https%3A%2F%2Fexample.sa&sz=256"
+    ]
+  );
+});
+
+test("does not treat recruitment platforms as company logo domains", () => {
+  assert.equal(
+    telegramCompanyDomain({
+      company: "شركة مثال",
+      apply_url: "https://example.wd3.myworkdayjobs.com/job/123"
+    }),
+    ""
   );
 });
