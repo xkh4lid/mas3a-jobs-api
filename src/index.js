@@ -177,6 +177,26 @@ const MILITARY_NEWS_SOURCES = [
 ];
 
 const SOURCE_CATALOG = [
+  ...SUCCESSFACTORS_SOURCES.map((source) => ({
+    key: source.key,
+    name: source.name,
+    url: source.listingUrls?.[0] || `https://${source.host}/`,
+    source_type: "successfactors",
+    sector: source.sector,
+    enabled: 1,
+    supported: 1,
+    status: "pending"
+  })),
+  ...MILITARY_NEWS_SOURCES.map((source) => ({
+    key: source.key,
+    name: source.name,
+    url: source.listingUrls?.[0] || `https://${source.host}/`,
+    source_type: "official_news",
+    sector: source.sector,
+    enabled: 1,
+    supported: 1,
+    status: "pending"
+  })),
   {
     key: "jadarat",
     name: "جدارات",
@@ -251,7 +271,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.6.0";
+const VERSION = "3.6.1";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
