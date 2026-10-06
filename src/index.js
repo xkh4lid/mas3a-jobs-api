@@ -32,6 +32,9 @@ const SUCCESSFACTORS_SOURCES = [
     host: "careers.saudia.com",
     listingUrls: [
       "https://careers.saudia.com/viewalljobs/?locale=ar_SA"
+    ],
+    searchUrls: [
+      "https://careers.saudia.com/search/?q=&locationsearch="
     ]
   },
   {
@@ -43,6 +46,9 @@ const SUCCESSFACTORS_SOURCES = [
     host: "careers.aramco.com",
     listingUrls: [
       "https://careers.aramco.com/saudi/go/For-Saudi-Applicants/7717723/?q=&sortColumn=referencedate&sortDirection=desc"
+    ],
+    searchUrls: [
+      "https://careers.aramco.com/saudi/search/?q=&locationsearch="
     ]
   },
   {
@@ -53,7 +59,10 @@ const SUCCESSFACTORS_SOURCES = [
     sector: "خاص",
     host: "careers.acwapower.com",
     listingUrls: [
-      "https://careers.acwapower.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+      "https://careers.acwapower.com/search/?q=&locationsearch=SA&sortColumn=referencedate&sortDirection=desc"
+    ],
+    searchUrls: [
+      "https://careers.acwapower.com/search/?q=&locationsearch=SA&sortColumn=referencedate&sortDirection=desc"
     ]
   },
   {
@@ -65,6 +74,9 @@ const SUCCESSFACTORS_SOURCES = [
     host: "careers.spimaco.com.sa",
     listingUrls: [
       "https://careers.spimaco.com.sa/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ],
+    searchUrls: [
+      "https://careers.spimaco.com.sa/search/?q=&locationsearch="
     ]
   },
   {
@@ -76,6 +88,9 @@ const SUCCESSFACTORS_SOURCES = [
     host: "careers.sab.com",
     listingUrls: [
       "https://careers.sab.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ],
+    searchUrls: [
+      "https://careers.sab.com/search/?q=&locationsearch="
     ]
   },
   {
@@ -87,6 +102,9 @@ const SUCCESSFACTORS_SOURCES = [
     host: "careers.jhah.com",
     listingUrls: [
       "https://careers.jhah.com/viewalljobs/?q=&sortColumn=referencedate&sortDirection=desc"
+    ],
+    searchUrls: [
+      "https://careers.jhah.com/search/?q=&locationsearch="
     ]
   },
   {
@@ -109,6 +127,9 @@ const SUCCESSFACTORS_SOURCES = [
     host: "jobs.alfanar.com",
     listingUrls: [
       "https://jobs.alfanar.com/alfanar/go/All-Openings/4442101/?location=SAUDI&q=&sortColumn=referencedate&sortDirection=desc"
+    ],
+    searchUrls: [
+      "https://jobs.alfanar.com/alfanar/search/?q=&locationsearch=SAUDI"
     ]
   },
   {
@@ -216,7 +237,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.5.0";
+const VERSION = "3.5.1";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -419,6 +440,25 @@ function discoverPaginationUrls(html, source, baseUrl) {
 
 function successFactorsSearchUrls(source) {
   const urls = new Set();
+
+  // When a source provides explicit official search URLs, never broaden the
+  // crawl beyond them. This is especially important for global companies where
+  // Masaa must ingest Saudi vacancies only.
+  if (Array.isArray(source.searchUrls) && source.searchUrls.length > 0) {
+    for (const candidate of source.searchUrls) {
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.protocol === "https:" && parsed.hostname === source.host) {
+          parsed.hash = "";
+          urls.add(parsed.href);
+        }
+      } catch {
+        // Ignore malformed configured search URLs.
+      }
+    }
+    return [...urls];
+  }
+
   try {
     const origin = `https://${source.host}`;
     urls.add(`${origin}/search/?q=&locationsearch=`);
