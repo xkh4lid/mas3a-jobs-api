@@ -271,7 +271,7 @@ const OFFICIAL_LISTING_SOURCES = [
   }
 ];
 
-const VERSION = "3.6.1";
+const VERSION = "3.6.2";
 const LOCALIZATION_VERSION = "ar-v4";
 const nowIso = () => new Date().toISOString();
 
@@ -1690,6 +1690,7 @@ async function recheckUnseenSuccessFactorsJobs(env, source, seenExternalIds, lim
 async function syncSuccessFactorsSource(env, source) {
   const urls = new Set();
   const categoryUrls = new Set();
+  const listingPaginationUrls = new Set();
   let listingWorked = false;
   let explicitNoJobs = false;
   let positiveListing = false;
@@ -1704,6 +1705,7 @@ async function syncSuccessFactorsSource(env, source) {
       const directJobs = discoverJobUrls(html, source, listingUrl);
       for (const url of directJobs) urls.add(url);
       for (const url of discoverCategoryUrls(html, source, listingUrl)) categoryUrls.add(url);
+      for (const url of discoverPaginationUrls(html, source, listingUrl)) listingPaginationUrls.add(url);
 
       if (directJobs.length > 0) {
         positiveListing = true;
@@ -1721,6 +1723,40 @@ async function syncSuccessFactorsSource(env, source) {
     const message = errors.join(" | ") || "Could not fetch any listing page";
     await upsertSource(env, source, { success: false, error: message, status: "error" });
     return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+
+  // If a configured official listing/search page already exposed jobs, follow
+  // its same-host pagination too. This preserves location filters such as SA or
+  // SAUDI while allowing Masaa to see every page instead of only the first one.
+  if (urls.size > 0 && listingPaginationUrls.size > 0) {
+    const queue = [...listingPaginationUrls];
+    const visited = new Set(source.listingUrls || []);
+
+    while (queue.length && visited.size < 16) {
+      const pageUrl = queue.shift();
+      if (!pageUrl || visited.has(pageUrl)) continue;
+      visited.add(pageUrl);
+
+      try {
+        const html = await fetchText(pageUrl, { attempts: 2 });
+        const pageJobs = discoverJobUrls(html, source, pageUrl);
+        for (const url of pageJobs) urls.add(url);
+        for (const categoryUrl of discoverCategoryUrls(html, source, pageUrl)) {
+          if (categoryUrls.size < 30) categoryUrls.add(categoryUrl);
+        }
+
+        const total = listingTotalJobs(html);
+        if (total !== null) claimedTotal = Math.max(claimedTotal, total);
+
+        for (const nextUrl of discoverPaginationUrls(html, source, pageUrl)) {
+          if (!visited.has(nextUrl) && !queue.includes(nextUrl) && queue.length < 24) {
+            queue.push(nextUrl);
+          }
+        }
+      } catch (error) {
+        errors.push(clean(error?.message || error));
+      }
+    }
   }
 
   // SuccessFactors viewalljobs pages often lazy-load actual rows. Search pages
