@@ -788,11 +788,21 @@ function removeBoilerplate(value) {
       .replace(/\bCategory\b/gi, " ")
       .replace(/\bClear\b/gi, " ")
       .replace(/\bAll\b/gi, " ")
+      .replace(/When you visit any website[\s\S]{0,1800}?(?:cookies?|privacy)/gi, " ")
+      .replace(/Your cookie preferences[\s\S]{0,1600}?(?:cookies?|privacy)/gi, " ")
+      .replace(/This website uses cookies[\s\S]{0,1600}?(?:Accept|Reject|Settings)/gi, " ")
+      .replace(/Cookie Preferences[\s\S]{0,1200}?(?:Accept|Reject|Settings)/gi, " ")
+      .replace(/Manage Preferences[\s\S]{0,1200}?(?:Accept|Reject|Settings)/gi, " ")
   );
 }
 
 function containsEnglishUiNoise(value) {
   return /(?:show more options|loading\.{0,3}|select how often|receive an alert|create alert|search by keyword|search by location|find similar jobs|view profile)/i
+    .test(String(value ?? ""));
+}
+
+function containsCookieNoise(value) {
+  return /(?:cookies?|cookie preferences|privacy preferences|local storage|browser storage|manage preferences|accept cookies|reject cookies|الكوكيز|ملفات تعريف الارتباط|تفضيلات الخصوصية|التخزين المحلي|قبول الكوكيز|إلغاء الكوكيز)/i
     .test(String(value ?? ""));
 }
 
@@ -853,13 +863,13 @@ function extractDescription(html) {
     900
   );
 
-  if (summary.length >= 35) return summary;
+  if (summary.length >= 35 && !containsCookieNoise(summary)) return summary;
 
   const fallback = removeBoilerplate(text)
     .replace(/^.*?(?:Company\s*:?\s*[^.]{1,120})/i, "")
     .slice(0, 700);
 
-  if (fallback.length < 35 || containsEnglishUiNoise(fallback)) return null;
+  if (fallback.length < 35 || containsEnglishUiNoise(fallback) || containsCookieNoise(fallback)) return null;
   return fallback;
 }
 
@@ -978,9 +988,9 @@ function extractDetail(html, source, url) {
     city,
     region: null,
     work_mode: remote ? "عن بُعد" : null,
-    qualification: clean(qualification) || null,
+    qualification: containsCookieNoise(qualification) ? null : (clean(qualification) || null),
     specialization: null,
-    experience: clean(experience) || null,
+    experience: containsCookieNoise(experience) ? null : (clean(experience) || null),
     salary: null,
     published_at: parseDate(published),
     expires_at: null,
@@ -1007,17 +1017,23 @@ function findApplyUrl(html, source, fallback) {
   }
 
   const raw = String(html ?? "").match(/https:\/\/(?:jobs\.sang\.gov\.sa|jobs\.sa)[^\s"'<>]*/i)?.[0];
-  return raw || fallback;
+  if (raw) return raw;
+  return source.applyHosts?.length ? null : fallback;
 }
 
 function extractMilitaryAnnouncement(html, source, url) {
   const text = stripHtml(html);
-  const lower = text.toLowerCase();
-  if (!source.keywords.some((keyword) => lower.includes(keyword.toLowerCase()))) return null;
 
   const title =
     stripHtml((String(html).match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || ["", ""])[1]) ||
     clean(decodeBasicEntities((String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i) || ["", ""])[1]));
+
+  const focused = clean(title + " " + text.slice(0, 4500));
+  const hasRecruitmentSignal = /(?:فتح\s+باب|القبول\s+والتسجيل|بدء\s+(?:استقبال|التقديم|التسجيل)|التقديم\s+(?:متاح|على)|التسجيل\s+(?:متاح|للخدمة)|التجنيد|الالتحاق\s+بالخدمة\s+العسكرية|وظائف\s+عسكرية)/i.test(focused);
+  if (!hasRecruitmentSignal || !source.keywords.some((keyword) => focused.includes(keyword))) return null;
+
+  const applyUrl = findApplyUrl(html, source, url);
+  if (!applyUrl || !isAllowedOfficialUrl(applyUrl, source)) return null;
 
   // Some official military announcements publish Hijri dates only.
   // We only inspect links currently surfaced by the official news listing, so when
@@ -1059,7 +1075,7 @@ function extractMilitaryAnnouncement(html, source, url) {
     expires_at: expiresAt,
     summary,
     source_url: url,
-    apply_url: findApplyUrl(html, source, url),
+    apply_url: applyUrl,
     remote: 0,
     fresh_graduate: 0,
     no_experience: 0
@@ -2146,7 +2162,7 @@ async function syncMilitaryNewsSource(env, source) {
   const seenExternalIds = [];
 
   const allArticleUrls = [...articleUrls];
-  const processedArticleUrls = allArticleUrls.slice(0, 60);
+  const processedArticleUrls = allArticleUrls.slice(0, 12);
 
   for (const url of processedArticleUrls) {
     try {
@@ -2183,6 +2199,21 @@ async function syncMilitaryNewsSource(env, source) {
     updated,
     errors: detailErrors
   };
+}
+
+async function quarantineInvalidMilitaryJobs(env) {
+  const timestamp = nowIso();
+  const result = await env.DB.prepare(
+    `UPDATE jobs
+     SET status = 'review', updated_at = ?
+     WHERE status = 'verified'
+       AND source_key = 'sang-military'
+       AND (
+         apply_url IS NULL
+         OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+       )`
+  ).bind(timestamp).run();
+  return Number(result.meta?.changes || 0);
 }
 
 async function expirePastDeadlineJobs(env) {
@@ -2261,10 +2292,11 @@ async function runSourceBatch(env, sourceKey) {
 
   await ensureCatalogSources(env);
   await expirePastDeadlineJobs(env);
+  await quarantineInvalidMilitaryJobs(env);
   const { startedAt, runId } = await beginSyncRun(env);
 
   const result = await syncSuccessFactorsSource(env, source, {
-    detailFetchBudget: 18,
+    detailFetchBudget: 8,
     detailAttempts: 2
   });
 
@@ -2307,6 +2339,7 @@ async function runSupportBatch(env) {
 
   await ensureCatalogSources(env);
   await expirePastDeadlineJobs(env);
+  await quarantineInvalidMilitaryJobs(env);
   const { startedAt, runId } = await beginSyncRun(env);
 
   let sourcesChecked = 0;
@@ -2507,11 +2540,11 @@ function publicArabicJob(row) {
     city: arabicPublicText(normalizedCity, "غير محددة", 120),
     region: arabicPublicText(row.region, null, 120),
     work_mode: normalizeWorkMode(row.work_mode, Boolean(row.remote)),
-    qualification: arabicPublicText(row.qualification, null, 450),
+    qualification: containsCookieNoise(row.qualification) ? null : arabicPublicText(row.qualification, null, 450),
     specialization: arabicPublicText(row.specialization, null, 180),
-    experience: arabicPublicText(row.experience, null, 350),
+    experience: containsCookieNoise(row.experience) ? null : arabicPublicText(row.experience, null, 350),
     summary: arabicPublicText(
-      row.summary,
+      containsCookieNoise(row.summary) ? null : row.summary,
       "فرصة وظيفية لدى " + company + ". راجع المصدر الرسمي للاطلاع على الوصف الكامل والمتطلبات وطريقة التقديم.",
       700
     )
@@ -2533,6 +2566,13 @@ async function listJobs(request, env) {
 
   const where = [];
   const values = [];
+  where.push(`NOT (
+    source_key = 'sang-military'
+    AND (
+      apply_url IS NULL
+      OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+    )
+  )`);
   if (includeExpiredDays > 0) {
     where.push(`(status = 'verified' OR (status = 'expired' AND date(COALESCE(expires_at, updated_at)) >= date('now', ?)))`);
     values.push(`-${includeExpiredDays} days`);
@@ -2630,7 +2670,8 @@ async function listSources(env) {
     monitor_only: "تحت المراقبة",
     restricted: "الوصول مقيد",
     needs_review: "يحتاج مراجعة للموصل",
-    error: "تعذر الفحص"
+    error: "تعذر الفحص",
+    partial: "فحص جزئي"
   };
   const typeLabels = {
     successfactors: "بوابة توظيف رسمية",
@@ -2692,7 +2733,12 @@ async function getJobById(id, env) {
   const job = await env.DB.prepare(
     `SELECT id, source_key, external_id, title, company, sector, city, region, work_mode, qualification, specialization, experience, salary, published_at, expires_at, summary, source_url, apply_url, remote, fresh_graduate, no_experience, discovered_at, last_checked_at, updated_at FROM jobs WHERE id = ? AND status = 'verified' LIMIT 1`
   ).bind(id).first();
-  return job ? { ok: true, job: publicArabicJob(job) } : { ok: false, error: "غير موجود" };
+  if (!job) return { ok: false, error: "غير موجود" };
+  if (job.source_key === "sang-military") {
+    const allowed = /^https:\/\/(?:jobs\.sang\.gov\.sa|jobs\.sa)\//i.test(String(job.apply_url || ""));
+    if (!allowed) return { ok: false, error: "غير موجود" };
+  }
+  return { ok: true, job: publicArabicJob(job) };
 }
 
 async function sitemapJobs(env) {
