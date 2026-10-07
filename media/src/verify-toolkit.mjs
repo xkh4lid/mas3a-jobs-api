@@ -17,6 +17,7 @@ const packages = [
   "@revideo/renderer",
   "@revideo/ffmpeg",
   "@revideo/telemetry",
+  "@revideo/ui",
   "@revideo/vite-plugin",
   "lottie-web",
   "@svgdotjs/svg.js",
