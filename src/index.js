@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.34.1-telegram-card-fast-render";
+const VERSION = "3.34.2-direct-telegram-photo-upload";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4456,6 +4456,37 @@ async function telegramApi(env, method, payload = {}) {
   return { ok: true, result: body.result };
 }
 
+async function telegramApiMultipart(env, method, formData) {
+  if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, error: "TELEGRAM_BOT_TOKEN is not configured" };
+  try {
+    const response = await fetch(
+      "https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/" + method,
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+    let body = null;
+    try { body = await response.json(); } catch {}
+    if (!response.ok || body?.ok !== true) {
+      console.error("mas3a_telegram_api_error", method, response.status, body?.description || "unknown");
+      return { ok: false, status: response.status, error: body?.description || "Telegram API error" };
+    }
+    return { ok: true, result: body.result };
+  } catch (error) {
+    return { ok: false, error: clean(error?.message || error || "Telegram API error") };
+  }
+}
+
+function telegramPhotoFormData(chatId, pngBytes, caption, buttons) {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("photo", new Blob([pngBytes], { type: "image/png" }), "masaa-job.png");
+  form.append("caption", clean(caption).slice(0, 1024));
+  form.append("reply_markup", JSON.stringify({ inline_keyboard: buttons }));
+  return form;
+}
+
 async function ensureTelegramStorage(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT NOT NULL)").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_subscribers (chat_id TEXT PRIMARY KEY, username TEXT, first_name TEXT, alerts_enabled INTEGER NOT NULL DEFAULT 0, alerts_since TEXT, city_filter TEXT, sector_filter TEXT, field_filter TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)").run();
@@ -5195,22 +5226,23 @@ async function telegramSendChannelJob(env, channelId, job) {
     buttons.push([{ text: "↗️ شارك الوظيفة مع شخص يبحث عن عمل", url: shareUrl }]);
   }
 
-  const photo = telegramJobCardUrl(env, job);
-  if (photo) {
-    const caption = telegramChannelJobText(job);
-    const imageResult = await telegramApi(env, "sendPhoto", {
-      chat_id: channelId,
-      photo,
-      caption: caption.length <= 1024 ? caption : caption.slice(0, 1021) + "...",
-      reply_markup: { inline_keyboard: buttons }
-    });
+  const caption = telegramChannelJobText(job);
+  try {
+    const png = await telegramJobCardPng(job);
+    const imageResult = await telegramApiMultipart(
+      env,
+      "sendPhoto",
+      telegramPhotoFormData(channelId, png, caption, buttons)
+    );
     if (imageResult.ok) return imageResult;
     console.error("mas3a_telegram_job_card_fallback", clean(imageResult.error || imageResult.status || "sendPhoto_failed"));
+  } catch (error) {
+    console.error("mas3a_telegram_job_card_render_fallback", clean(error?.message || error || "render_failed"));
   }
 
   return telegramApi(env, "sendMessage", {
     chat_id: channelId,
-    text: telegramChannelJobText(job),
+    text: caption,
     disable_web_page_preview: true,
     reply_markup: { inline_keyboard: buttons }
   });
@@ -5752,7 +5784,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {
