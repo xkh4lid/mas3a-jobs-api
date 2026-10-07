@@ -308,7 +308,7 @@ async function discoverSpaSitemapCandidates() {
         anchorText: ""
       })),
     (item) => item.url
-  ).slice(0, 80);
+  ).slice(0, 20);
 }
 
 function sourceSummaryRow(result) {
@@ -553,7 +553,7 @@ export async function runProbe() {
 
   if (dedupedCandidates.length > 0) {
     const articleCrawler = new PlaywrightCrawler({
-      maxConcurrency: 2,
+      maxConcurrency: 4,
       maxRequestRetries: 0,
       requestHandlerTimeoutSecs: 25,
       navigationTimeoutSecs: 15,
