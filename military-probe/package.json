@@ -1,0 +1,15 @@
+{
+  "name": "masaa-military-browser-probe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check probe.mjs && node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs",
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "crawlee": "3.18.2",
+    "playwright": "1.63.0"
+  }
+}
