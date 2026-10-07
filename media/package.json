@@ -25,6 +25,8 @@
     "@revideo/core": "0.11.0",
     "@revideo/ffmpeg": "0.11.0",
     "@revideo/renderer": "0.11.0",
+    "@revideo/telemetry": "0.11.0",
+    "@revideo/vite-plugin": "0.11.0",
     "@svgdotjs/svg.js": "^3.0.0",
     "fabric": "^6.0.0",
     "konva": "^9.0.0",
