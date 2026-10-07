@@ -78,7 +78,23 @@ const SOURCES = [
     url: "https://www.spa.gov.sa/news/latest-news?page=1",
     kind: "listing",
     officialHosts: ["www.spa.gov.sa", "spa.gov.sa"],
-    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa"]
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"]
+  },
+  {
+    key: "spa-search-tajnid",
+    name: "واس - بحث التجنيد الموحد",
+    url: "https://www.spa.gov.sa/search?q=%D8%A7%D9%84%D8%AA%D8%AC%D9%86%D9%8A%D8%AF%20%D8%A7%D9%84%D9%85%D9%88%D8%AD%D8%AF",
+    kind: "listing",
+    officialHosts: ["www.spa.gov.sa", "spa.gov.sa"],
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"]
+  },
+  {
+    key: "spa-search-military-service",
+    name: "واس - بحث الخدمة العسكرية",
+    url: "https://www.spa.gov.sa/search?q=%D8%A7%D9%84%D8%AE%D8%AF%D9%85%D8%A9%20%D8%A7%D9%84%D8%B9%D8%B3%D9%83%D8%B1%D9%8A%D8%A9",
+    kind: "listing",
+    officialHosts: ["www.spa.gov.sa", "spa.gov.sa"],
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"]
   },
   {
     key: "absher-jobs",
@@ -161,7 +177,7 @@ export function looksLikeOfficialArticle(url, source) {
       return parsed.pathname.toLowerCase().includes("/jobs/ads/");
     }
 
-    if (source.key === "spa-military") {
+    if (source.key.startsWith("spa-")) {
       return /\/(?:ar\/)?N\d+$/i.test(parsed.pathname) || /^\/\d{6,}$/i.test(parsed.pathname);
     }
 
@@ -260,7 +276,7 @@ function discoverCandidates(snapshot, source) {
 
     if (!looksLikeOfficialArticle(url, source)) continue;
 
-    if (["spa-military", "sang-news"].includes(source.key) && !hasMilitarySignal(combined)) {
+    if ((source.key.startsWith("spa-") || source.key === "sang-news") && !hasMilitarySignal(combined)) {
       continue;
     }
 
