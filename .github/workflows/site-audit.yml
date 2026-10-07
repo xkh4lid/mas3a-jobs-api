@@ -1,0 +1,65 @@
+name: Free Site Audit
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  structural-seo:
+    name: Structural SEO audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Audit live Masaa site
+        run: node scripts/site-audit.mjs
+        env:
+          MASAA_SITE_URL: https://mas3a.pages.dev
+          AUDIT_MAX_URLS: "200"
+          AUDIT_CONCURRENCY: "8"
+          AUDIT_TIMEOUT_MS: "12000"
+
+      - name: Upload structural audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: masaa-site-audit
+          path: |
+            site-audit-report.json
+            site-audit-report.md
+          if-no-files-found: warn
+          retention-days: 7
+
+  lighthouse:
+    name: Lighthouse SEO and performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run Lighthouse CI
+        run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.cjs
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: masaa-lighthouse
+          path: lighthouse-results
+          if-no-files-found: warn
+          retention-days: 7
