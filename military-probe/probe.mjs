@@ -55,6 +55,15 @@ export const AUTH_SIGNALS = [
   "password"
 ];
 
+const SPA_SITEMAP_SOURCE = {
+  key: "spa-sitemap",
+  name: "واس - خريطة الموقع العربية",
+  url: "https://www.spa.gov.sa/ar/sitemap.xml",
+  kind: "sitemap",
+  officialHosts: ["www.spa.gov.sa", "spa.gov.sa"],
+  applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"]
+};
+
 const SOURCES = [
   {
     key: "sang-news",
@@ -202,6 +211,104 @@ function dedupeBy(items, keyFn) {
     if (key && !map.has(key)) map.set(key, item);
   }
   return [...map.values()];
+}
+
+export function parseSitemapEntries(xml) {
+  const source = String(xml ?? "");
+  const entries = [];
+  const urlRegex = /<url\b[^>]*>([\s\S]*?)<\/url>/gi;
+  let match;
+  while ((match = urlRegex.exec(source))) {
+    const block = match[1];
+    const loc = block.match(/<loc\b[^>]*>([\s\S]*?)<\/loc>/i)?.[1]
+      ?.replace(/&amp;/gi, "&")
+      .trim();
+    if (!loc) continue;
+    const lastmod = block.match(/<lastmod\b[^>]*>([\s\S]*?)<\/lastmod>/i)?.[1]?.trim() || null;
+    entries.push({ loc, lastmod });
+  }
+  return entries;
+}
+
+export function parseSitemapIndex(xml) {
+  const source = String(xml ?? "");
+  const entries = [];
+  const itemRegex = /<sitemap\b[^>]*>([\s\S]*?)<\/sitemap>/gi;
+  let match;
+  while ((match = itemRegex.exec(source))) {
+    const block = match[1];
+    const loc = block.match(/<loc\b[^>]*>([\s\S]*?)<\/loc>/i)?.[1]
+      ?.replace(/&amp;/gi, "&")
+      .trim();
+    if (!loc) continue;
+    const lastmod = block.match(/<lastmod\b[^>]*>([\s\S]*?)<\/lastmod>/i)?.[1]?.trim() || null;
+    entries.push({ loc, lastmod });
+  }
+  return entries;
+}
+
+function recentEnough(lastmod, days = 45) {
+  if (!lastmod) return true;
+  const time = new Date(lastmod).getTime();
+  if (!Number.isFinite(time)) return true;
+  return Date.now() - time <= days * 86400000;
+}
+
+async function fetchTextLimited(url, maxBytes = 5_000_000) {
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "MasaaJobsBot/4.0 (+https://mas3a.pages.dev)",
+      Accept: "application/xml,text/xml,text/plain;q=0.9,*/*;q=0.5",
+      "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.8"
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) throw new Error("HTTP " + response.status + " for " + url);
+  const text = await response.text();
+  if (Buffer.byteLength(text, "utf8") > maxBytes) {
+    throw new Error("Sitemap too large: " + url);
+  }
+  return text;
+}
+
+async function discoverSpaSitemapCandidates() {
+  const root = await fetchTextLimited(SPA_SITEMAP_SOURCE.url);
+  const direct = parseSitemapEntries(root);
+  let entries = direct;
+  const childMaps = parseSitemapIndex(root);
+
+  if (!entries.length && childMaps.length) {
+    const ordered = [...childMaps]
+      .sort((a, b) => String(b.lastmod || "").localeCompare(String(a.lastmod || "")))
+      .slice(0, 8);
+    const chunks = [];
+    for (const child of ordered) {
+      if (!isAllowedHttpsUrl(child.loc, SPA_SITEMAP_SOURCE.officialHosts)) continue;
+      try {
+        const xml = await fetchTextLimited(child.loc);
+        chunks.push(...parseSitemapEntries(xml));
+      } catch {
+        // A single child sitemap must not break discovery.
+      }
+    }
+    entries = chunks;
+  }
+
+  return dedupeBy(
+    entries
+      .filter((entry) => recentEnough(entry.lastmod, 45))
+      .map((entry) => entry.loc)
+      .filter((url) => looksLikeOfficialArticle(url, SPA_SITEMAP_SOURCE))
+      .map((url) => ({
+        url,
+        sourceKey: SPA_SITEMAP_SOURCE.key,
+        sourceName: SPA_SITEMAP_SOURCE.name,
+        officialHosts: SPA_SITEMAP_SOURCE.officialHosts,
+        applyHosts: SPA_SITEMAP_SOURCE.applyHosts,
+        anchorText: ""
+      })),
+    (item) => item.url
+  ).slice(0, 80);
 }
 
 function sourceSummaryRow(result) {
@@ -377,6 +484,15 @@ export async function runProbe() {
 
   const sourceResults = [];
   const candidateRequests = [];
+  let sitemapStatus = { ok: false, candidates: 0, error: null };
+
+  try {
+    const sitemapCandidates = await discoverSpaSitemapCandidates();
+    candidateRequests.push(...sitemapCandidates);
+    sitemapStatus = { ok: true, candidates: sitemapCandidates.length, error: null };
+  } catch (error) {
+    sitemapStatus = { ok: false, candidates: 0, error: clean(error?.message || error) };
+  }
 
   const listingCrawler = new PlaywrightCrawler({
     maxConcurrency: 2,
@@ -495,6 +611,7 @@ export async function runProbe() {
       officialPublicPagesOnly: true
     },
     sources: sourceResults.map(({ anchors, ...rest }) => rest),
+    sitemap: sitemapStatus,
     candidates: articleResults,
     publishable: articleResults.filter((item) => item.publishable)
   };
@@ -507,6 +624,11 @@ export async function runProbe() {
     "Generated: " + report.generatedAt,
     "",
     "Policy: public official pages only; no CAPTCHA/login bypass.",
+    "",
+    "## SPA sitemap",
+    "",
+    "Status: " + (sitemapStatus.ok ? "ok" : "failed") + " — candidates: " + sitemapStatus.candidates +
+      (sitemapStatus.error ? " — " + sitemapStatus.error : ""),
     "",
     "## Sources",
     "",
