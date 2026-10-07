@@ -214,6 +214,17 @@ async function snapshotPage(page, source, response) {
       text: (node.textContent || "").replace(/\s+/g, " ").trim()
     }))
   ).catch(() => []);
+  const resources = await page.evaluate(() =>
+    performance.getEntriesByType("resource").slice(-400).map((entry) => ({
+      name: entry.name,
+      initiatorType: entry.initiatorType
+    }))
+  ).catch(() => []);
+  const networkUrls = [...new Set(
+    resources
+      .filter((item) => ["fetch", "xmlhttprequest"].includes(item.initiatorType))
+      .map((item) => item.name)
+  )].slice(0, 120);
 
   const combined = clean(title + " " + bodyText.slice(0, 12000));
   const status = typeof response?.status === "function" ? response.status() : null;
@@ -232,6 +243,7 @@ async function snapshotPage(page, source, response) {
     closed: isClosedText(combined),
     militarySignal: hasMilitarySignal(combined),
     linksFound: anchors.length,
+    networkUrls,
     anchors
   };
 }
@@ -248,7 +260,7 @@ function discoverCandidates(snapshot, source) {
 
     if (!looksLikeOfficialArticle(url, source)) continue;
 
-    if (source.key === "spa-military" && !hasMilitarySignal(combined)) {
+    if (["spa-military", "sang-news"].includes(source.key) && !hasMilitarySignal(combined)) {
       continue;
     }
 
@@ -361,7 +373,8 @@ export async function runProbe() {
       }
     },
     preNavigationHooks: [
-      async ({ page }) => {
+      async ({ page }, gotoOptions) => {
+        gotoOptions.waitUntil = "domcontentloaded";
         await page.setExtraHTTPHeaders({
           "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.8"
         });
@@ -418,7 +431,8 @@ export async function runProbe() {
         }
       },
       preNavigationHooks: [
-        async ({ page }) => {
+        async ({ page }, gotoOptions) => {
+          gotoOptions.waitUntil = "domcontentloaded";
           await page.setExtraHTTPHeaders({
             "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.8"
           });
@@ -486,6 +500,13 @@ export async function runProbe() {
       "| " + sourceSummaryRow(item).map((value) => String(value).replace(/\|/g, "\\|")).join(" | ") + " |"
     ),
     "",
+    "## Network/API clues",
+    "",
+    ...sourceResults.flatMap((item) => {
+      const urls = (item.networkUrls || []).filter((url) => /(?:api|news|job|career|backend|graphql|search|vacan|recruit)/i.test(url)).slice(0, 12);
+      if (!urls.length) return [];
+      return ["### " + item.sourceKey, "", ...urls.map((url) => "- " + url), ""];
+    }),
     "## Candidate announcements",
     "",
     articleResults.length
