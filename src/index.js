@@ -171,7 +171,9 @@ const MILITARY_NEWS_SOURCES = [
       "https://www.sang.gov.sa/MediaAffairs/MONGNews/Pages/default.aspx"
     ],
     articlePath: /\/MediaAffairs\/MONGNews\/\d+\/Pages\/[^?#]+\.aspx/i,
-    applyHosts: ["jobs.sang.gov.sa", "jobs.sa"],
+    applyHosts: ["jobs.sang.gov.sa", "jobs.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"],
+    listingKeywords: ["فتح باب", "القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "الالتحاق بالخدمة العسكرية"],
+    excludeKeywords: ["نتائج", "المرشحين", "المرشحات", "القبول المبدئي", "المقبولين", "المقبولات"],
     keywords: ["القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "رتبة", "الالتحاق بالخدمة العسكرية"]
   },
   {
@@ -183,8 +185,8 @@ const MILITARY_NEWS_SOURCES = [
     listingUrls: [
       "https://www.spa.gov.sa/news/latest-news?page=1"
     ],
-    articlePath: /^\/N\d+$/i,
-    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa"],
+    articlePath: /^\/(?:ar\/)?N\d+$/i,
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"],
     listingKeywords: [
       "فتح باب", "القبول والتسجيل", "القبول الموحد", "التجنيد الموحد",
       "استقبال طلبات", "بدء التقديم", "رتبة جندي", "رتبة جندي أول",
@@ -1572,7 +1574,7 @@ function extractMilitaryAnnouncement(html, source, url) {
   const summary = removeBoilerplate(summaryMatch?.[0] || text).slice(0, 650);
   const parsedUrl = new URL(url);
   const pathMatch = parsedUrl.pathname.match(/\/MONGNews\/([^/]+)\/Pages\/([^/.]+)/i);
-  const spaMatch = parsedUrl.pathname.match(/^\/N(\d+)$/i);
+  const spaMatch = parsedUrl.pathname.match(/^\/(?:ar\/)?N(\d+)$/i);
   const slug = pathMatch
     ? pathMatch[1] + "-" + pathMatch[2]
     : spaMatch
@@ -3331,6 +3333,9 @@ async function quarantineInvalidMilitaryJobs(env) {
            apply_url NOT LIKE 'https://jobs.sang.gov.sa/%'
            AND apply_url NOT LIKE 'https://jobs.sa/%'
            AND apply_url NOT LIKE 'https://tajnid.mod.gov.sa/%'
+           AND apply_url NOT LIKE 'https://afca.mod.gov.sa/%'
+           AND apply_url NOT LIKE 'https://kkmar.gov.sa/%'
+           AND apply_url NOT LIKE 'https://www.kkmar.gov.sa/%'
          )
        )`
   ).bind(timestamp).run();
