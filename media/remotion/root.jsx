@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Composition, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { MasaaSaudiAd } from "./masaa-saudi-ad.jsx";
 
 const job = {
   title: "مدير مالية شركات",
@@ -22,4 +23,7 @@ function JobStory() {
   </AbsoluteFill>;
 }
 
-export const MasaaVideo = () => <Composition id="JobStory" component={JobStory} durationInFrames={300} fps={25} width={1080} height={1920}/>;
+export const MasaaVideo = () => <>
+  <Composition id="JobStory" component={JobStory} durationInFrames={300} fps={25} width={1080} height={1920}/>
+  <Composition id="MasaaSaudiAd" component={MasaaSaudiAd} durationInFrames={455} fps={30} width={1080} height={1920}/>
+</>;
