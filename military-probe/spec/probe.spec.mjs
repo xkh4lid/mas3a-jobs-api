@@ -7,7 +7,9 @@ import {
   isAuthText,
   isAllowedHttpsUrl,
   hostnameMatches,
-  looksLikeOfficialArticle
+  looksLikeOfficialArticle,
+  parseSitemapEntries,
+  parseSitemapIndex
 } from "../probe.mjs";
 
 test("detects Arabic military recruitment signals", () => {
@@ -30,6 +32,17 @@ test("accepts only configured HTTPS official hosts", () => {
   assert.equal(isAllowedHttpsUrl("http://jobs.sa/apply/123", ["jobs.sa"]), false);
   assert.equal(isAllowedHttpsUrl("https://jobs.sa.evil.example/apply/123", ["jobs.sa"]), false);
   assert.equal(hostnameMatches("sub.jobs.sa", ["jobs.sa"]), true);
+});
+
+test("parses SPA sitemap URL sets and indexes", () => {
+  assert.deepEqual(
+    parseSitemapEntries('<?xml version="1.0"?><urlset><url><loc>https://www.spa.gov.sa/ar/N300004</loc><lastmod>2026-10-07</lastmod></url></urlset>'),
+    [{ loc: "https://www.spa.gov.sa/ar/N300004", lastmod: "2026-10-07" }]
+  );
+  assert.deepEqual(
+    parseSitemapIndex('<?xml version="1.0"?><sitemapindex><sitemap><loc>https://www.spa.gov.sa/ar/news-1.xml</loc><lastmod>2026-10-07</lastmod></sitemap></sitemapindex>'),
+    [{ loc: "https://www.spa.gov.sa/ar/news-1.xml", lastmod: "2026-10-07" }]
+  );
 });
 
 test("recognizes current SANG and SPA article path shapes", () => {
