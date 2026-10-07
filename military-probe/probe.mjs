@@ -352,9 +352,9 @@ export async function runProbe() {
 
   const listingCrawler = new PlaywrightCrawler({
     maxConcurrency: 2,
-    maxRequestRetries: 1,
-    requestHandlerTimeoutSecs: 45,
-    navigationTimeoutSecs: 30,
+    maxRequestRetries: 0,
+    requestHandlerTimeoutSecs: 25,
+    navigationTimeoutSecs: 15,
     launchContext: {
       launchOptions: {
         headless: true
@@ -409,9 +409,9 @@ export async function runProbe() {
   if (dedupedCandidates.length > 0) {
     const articleCrawler = new PlaywrightCrawler({
       maxConcurrency: 2,
-      maxRequestRetries: 1,
-      requestHandlerTimeoutSecs: 45,
-      navigationTimeoutSecs: 30,
+      maxRequestRetries: 0,
+      requestHandlerTimeoutSecs: 25,
+      navigationTimeoutSecs: 15,
       launchContext: {
         launchOptions: {
           headless: true
