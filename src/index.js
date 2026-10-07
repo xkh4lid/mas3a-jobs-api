@@ -539,15 +539,7 @@ function parseArabicGregorianDate(value) {
   };
   const names = Object.keys(months)
     .sort((a, b) => b.length - a.length)
-    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\function parseDmyDate(value) {
-  const match = String(value ?? "").match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](20\d{2})\b/);
-  if (!match) return null;
-  const [, d, m, y] = match;
-  const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  const date = new Date(`${iso}T12:00:00Z`);
-  return Number.isNaN(date.getTime()) ? null : iso;
-}
-"))
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
   const match = text.match(new RegExp("\\b(\\d{1,2})\\s+(" + names + ")\\s+(20\\d{2})\\b", "i"));
   if (!match) return null;
