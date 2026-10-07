@@ -1,0 +1,76 @@
+name: Masaa Media Engine
+
+on:
+  pull_request:
+    paths:
+      - "media/**"
+      - ".github/workflows/media-engine.yml"
+  push:
+    branches: [main]
+    paths:
+      - "media/**"
+      - ".github/workflows/media-engine.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-media:
+    name: Build and validate media toolkit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install FFmpeg and ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg imagemagick fonts-dejavu-core
+
+      - name: Install media dependencies
+        working-directory: media
+        run: npm install --no-audit --no-fund
+
+      - name: Verify toolkit
+        working-directory: media
+        run: npm run check
+
+      - name: Render sample image and motion outputs
+        working-directory: media
+        run: |
+          npm run render:sample
+          npm run render:satori
+
+      - name: Build browser media studio
+        working-directory: media
+        run: npm run studio:build
+
+      - name: Bundle Remotion composition
+        working-directory: media
+        run: npm run remotion:bundle
+
+      - name: Validate rendered assets
+        working-directory: media
+        run: |
+          test -s output/sample/job-1200x1200.png
+          test -s output/sample/job-1080x1350.png
+          test -s output/sample/job-1080x1920.png
+          test -s output/sample/job-1080x1920.mp4
+          test -s output/sample/social-1200x630.png
+          ffprobe -v error -show_entries stream=width,height,duration -of default=noprint_wrappers=1 output/sample/job-1080x1920.mp4
+
+      - name: Upload media-engine sample
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: masaa-media-engine-sample
+          path: |
+            media/output/sample/
+            media/output/studio/
+          if-no-files-found: warn
+          retention-days: 7
