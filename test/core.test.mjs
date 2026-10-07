@@ -22,6 +22,7 @@ import {
   telegramShareUrl,
   telegramChannelJobText,
   telegramSafeJobDetail,
+  telegramPhotoFormData,
   TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY,
   TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY
 } from "../src/index.js";
@@ -222,7 +223,7 @@ test("wraps long Telegram job titles without overflowing the card", () => {
 test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
   const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
   assert.equal(url.searchParams.get("job"), "job-123");
-  assert.equal(url.searchParams.get("v"), "3.34.1-telegram-card-fast-render");
+  assert.equal(url.searchParams.get("v"), "3.34.2-direct-telegram-photo-upload");
 });
 
 
@@ -302,4 +303,21 @@ test("SPIMACO-style malformed fields do not leak into Telegram job text", () => 
   assert.doesNotMatch(text, /الخبرة:/);
   assert.match(text, /مدير مالية شركات/);
   assert.match(text, /سبيماكو الدوائية/);
+});
+
+
+test("builds multipart Telegram photo uploads with PNG bytes and caption", async () => {
+  const form = telegramPhotoFormData(
+    "-100123",
+    new Uint8Array([137, 80, 78, 71, 1, 2, 3]),
+    "وظيفة موثقة",
+    [[{ text: "التقديم", url: "https://example.sa/job" }]]
+  );
+  assert.equal(form.get("chat_id"), "-100123");
+  assert.equal(form.get("caption"), "وظيفة موثقة");
+  assert.match(String(form.get("reply_markup")), /inline_keyboard/);
+  const photo = form.get("photo");
+  assert.ok(photo instanceof Blob);
+  assert.equal(photo.type, "image/png");
+  assert.equal(photo.name, "masaa-job.png");
 });
