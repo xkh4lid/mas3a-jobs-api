@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check probe.mjs && node --test test/*.test.mjs",
-    "test": "node --test test/*.test.mjs",
+    "check": "node --check probe.mjs && node --test spec/*.spec.mjs",
+    "test": "node --test spec/*.spec.mjs",
     "probe": "node probe.mjs"
   },
   "dependencies": {
