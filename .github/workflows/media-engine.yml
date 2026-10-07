@@ -19,7 +19,7 @@ jobs:
   validate-media:
     name: Build and validate media toolkit
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -27,14 +27,26 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install FFmpeg and ImageMagick
+      - name: Install system media dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick fonts-dejavu-core
+          sudo apt-get install -y ffmpeg imagemagick fonts-dejavu-core cmake build-essential
+
+      - name: Restore native media tools
+        uses: actions/cache@v4
+        with:
+          path: media/.tools
+          key: media-native-${{ runner.os }}-${{ runner.arch }}-whisper-v1.9.5-auto-editor-31.7.2
 
       - name: Install media dependencies
         working-directory: media
         run: npm install --no-audit --no-fund
+
+      - name: Install whisper.cpp and Auto-Editor
+        working-directory: media
+        env:
+          WHISPER_MODEL: none
+        run: npm run native:install
 
       - name: Verify toolkit
         working-directory: media
@@ -54,6 +66,14 @@ jobs:
         working-directory: media
         run: npm run remotion:bundle
 
+      - name: Render Revideo headless sample
+        working-directory: media
+        env:
+          REVIDEO_WIDTH: "540"
+          REVIDEO_HEIGHT: "960"
+          REVIDEO_DURATION: "4"
+        run: npm run revideo:render
+
       - name: Validate rendered assets
         working-directory: media
         run: |
@@ -62,7 +82,9 @@ jobs:
           test -s output/sample/job-1080x1920.png
           test -s output/sample/job-1080x1920.mp4
           test -s output/sample/social-1200x630.png
+          test -s output/revideo/masaa-job-motion.mp4
           ffprobe -v error -show_entries stream=width,height,duration -of default=noprint_wrappers=1 output/sample/job-1080x1920.mp4
+          ffprobe -v error -show_entries stream=width,height,duration -of default=noprint_wrappers=1 output/revideo/masaa-job-motion.mp4
 
       - name: Upload media-engine sample
         if: always()
@@ -71,6 +93,7 @@ jobs:
           name: masaa-media-engine-sample
           path: |
             media/output/sample/
+            media/output/revideo/
             media/output/studio/
           if-no-files-found: warn
           retention-days: 7
