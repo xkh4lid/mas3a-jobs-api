@@ -417,7 +417,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.34.0-telegram-growth-loop";
+const VERSION = "3.34.1-telegram-card-fast-render";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4789,20 +4789,44 @@ function telegramJobDiscoveryHashtags(job) {
   return [...new Set(tags)].slice(0, 4).join(" ");
 }
 
+function telegramSafeJobDetail(value, kind) {
+  const text = clean(value);
+  if (!text || text.length < 3 || text.length > 140) return "";
+  if (!/[؀-ۿA-Za-z0-9]/.test(text)) return "";
+  if (/^[\s&,،؛:/\\|+_.\-×]+$/.test(text)) return "";
+
+  const normalized = telegramNormalizeFilter(text);
+  if (kind === "qualification") {
+    if (!/(بكالوريوس|دبلوم|ماجستير|دكتوراه|ثانوي|درجه|شهاده|مؤهل|تعليم|جامع|bachelor|diploma|master|phd|degree|education|certificate)/i.test(normalized)) {
+      return "";
+    }
+  }
+
+  if (kind === "experience") {
+    if (!/(خبر|سنه|سنوات|عام|اعوام|year|years|experience|experienced)/i.test(normalized)) {
+      return "";
+    }
+  }
+
+  return text;
+}
+
 function telegramChannelJobText(job) {
   const title = clean(job.title);
   const company = clean(job.company);
   const city = clean(job.city);
   const locationLabel = city && city !== "السعودية" ? city : "السعودية";
   const headline = "💼 وظائف " + locationLabel + " | " + title + (company ? " – " + company : "");
+  const qualification = telegramSafeJobDetail(job.qualification, "qualification");
+  const experience = telegramSafeJobDetail(job.experience, "experience");
 
   const lines = [headline, "", "المسمى: " + title, "الجهة: " + company];
   if (city && city !== "السعودية") lines.push("المدينة: " + city);
   if (clean(job.sector)) lines.push("القطاع: " + clean(job.sector));
   if (clean(job.salary)) lines.push("الراتب: " + clean(job.salary));
   if (clean(job.work_mode)) lines.push("نمط العمل: " + clean(job.work_mode));
-  if (clean(job.qualification) && clean(job.qualification).length <= 140) lines.push("المؤهل: " + clean(job.qualification));
-  if (clean(job.experience) && clean(job.experience).length <= 140) lines.push("الخبرة: " + clean(job.experience));
+  if (qualification) lines.push("المؤهل: " + qualification);
+  if (experience) lines.push("الخبرة: " + experience);
   if (clean(job.expires_at)) lines.push("آخر موعد: " + clean(job.expires_at));
 
   lines.push("", "✅ متحقق من المصدر الرسمي");
@@ -4978,12 +5002,22 @@ function telegramCompanyLogoCandidateUrls(domain) {
   ];
 }
 
-async function telegramImageDataUri(url) {
+async function telegramFetchWithTimeout(url, options = {}, timeoutMs = 1400) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function telegramImageDataUri(url, timeoutMs = 1400) {
+  try {
+    const response = await telegramFetchWithTimeout(url, {
       redirect: "follow",
       headers: { "User-Agent": "MasaaJobs/1.0" }
-    });
+    }, timeoutMs);
     if (!response.ok) return "";
     const contentType = clean(response.headers.get("Content-Type")).split(";")[0].toLowerCase();
     if (!["image/png", "image/jpeg"].includes(contentType)) return "";
@@ -5004,16 +5038,30 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+async function telegramFontBytesFromUrl(url) {
+  const response = await telegramFetchWithTimeout(url, {
+    headers: { "User-Agent": "MasaaJobs/1.0" }
+  }, 2800);
+  if (!response.ok) throw new Error("telegram_card_font_fetch_failed:" + response.status);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength < 10000 || bytes.byteLength > 2000000) throw new Error("telegram_card_font_invalid");
+  return bytes;
+}
+
 let telegramCardFontPromise = null;
 async function telegramCardFontBytes() {
   if (!telegramCardFontPromise) {
     telegramCardFontPromise = (async () => {
-      const response = await fetch("https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", {
-        headers: { "User-Agent": "MasaaJobs/1.0" }
-      });
-      if (!response.ok) throw new Error("telegram_card_font_fetch_failed:" + response.status);
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength < 10000 || bytes.byteLength > 2000000) throw new Error("telegram_card_font_invalid");
+      const urls = [
+        "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf",
+        "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf"
+      ];
+      const results = await Promise.all(urls.map(async (url) => {
+        try { return await telegramFontBytesFromUrl(url); }
+        catch { return null; }
+      }));
+      const bytes = results.find((value) => value instanceof Uint8Array && value.byteLength >= 10000);
+      if (!bytes) throw new Error("telegram_card_font_unavailable");
       return bytes;
     })().catch((error) => {
       telegramCardFontPromise = null;
@@ -5027,11 +5075,9 @@ async function telegramCompanyLogoDataUri(job) {
   const domain = telegramCompanyDomain(job);
   if (!domain) return "";
 
-  for (const url of telegramCompanyLogoCandidateUrls(domain)) {
-    const dataUri = await telegramImageDataUri(url);
-    if (dataUri) return dataUri;
-  }
-  return "";
+  const urls = telegramCompanyLogoCandidateUrls(domain);
+  const results = await Promise.all(urls.map((url) => telegramImageDataUri(url, 1200)));
+  return results.find(Boolean) || "";
 }
 
 function telegramJobCardSvg(job, logoDataUri = "") {
@@ -5706,7 +5752,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {
