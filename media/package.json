@@ -1,0 +1,30 @@
+{
+  "name": "masaa-media-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node src/verify-toolkit.mjs && node --check src/card.mjs && node --check src/render.mjs && node --check src/satori-card.mjs && node --check comfyui/adapter.mjs && npm test",
+    "test": "node --test test/*.test.mjs",
+    "render:sample": "node src/render.mjs --input sample-job.json --out output/sample",
+    "render:satori": "node src/satori-card.mjs --input sample-job.json --out output/sample/social-1200x630.png",
+    "studio:build": "vite build studio --outDir ../output/studio",
+    "remotion:bundle": "remotion bundle remotion/index.jsx output/remotion-bundle"
+  },
+  "dependencies": {
+    "@motion-canvas/2d": "^3.0.0",
+    "@motion-canvas/core": "^3.0.0",
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/cli": "^4.0.0",
+    "@svgdotjs/svg.js": "^3.0.0",
+    "fabric": "^6.0.0",
+    "konva": "^9.0.0",
+    "lottie-web": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0",
+    "satori": "^0.18.0",
+    "sharp": "^0.34.0",
+    "vite": "^7.0.0"
+  }
+}
