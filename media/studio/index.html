@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Masaa Media Studio</title>
+  <style>
+    body{margin:0;background:#031c18;color:#fff;font-family:Arial,sans-serif}main{max-width:1180px;margin:auto;padding:24px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.panel{background:#07342c;border:1px solid #1d5c4d;border-radius:20px;padding:18px}
+    #konva,#fabric{background:#fbfcfa;border-radius:16px;overflow:hidden;min-height:360px}.badge{color:#68e8bc}
+    @media(max-width:800px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <h1>مَسعى — Media Studio</h1>
+  <p class="badge">SVG.js + Fabric.js + Konva + Lottie</p>
+  <div class="grid"><section class="panel"><div id="konva"></div></section><section class="panel"><canvas id="fabric" width="520" height="360"></canvas></section></div>
+  <div id="svg-stage" class="panel" style="margin-top:20px"></div>
+  <div id="lottie-stage" style="width:220px;height:120px;margin:20px auto"></div>
+  <script type="module" src="/main.js"></script>
+</main></body>
+</html>
