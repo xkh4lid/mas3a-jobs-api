@@ -338,6 +338,16 @@ await import("node:fs/promises").then(async (fs) => {
 });
 
 console.log(JSON.stringify(report.totals, null, 2));
+const warningCounts = Object.entries(
+  report.warnings.reduce((acc, item) => {
+    acc[item.code] = (acc[item.code] || 0) + 1;
+    return acc;
+  }, {})
+).sort((a, b) => b[1] - a[1]);
+if (warningCounts.length) {
+  console.log("Warning counts:");
+  for (const [code, count] of warningCounts) console.log(`- ${code}: ${count}`);
+}
 if (report.critical.length) {
   console.error("Critical site audit issues detected.");
   process.exitCode = 1;
