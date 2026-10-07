@@ -9,6 +9,7 @@ import {
   externalIdFromUrl,
   normalizeDigits,
   parseDate,
+  parseArabicGregorianDate,
   isAllowedOfficialUrl,
   stableTextId,
   successFactorsSearchUrls,
@@ -43,6 +44,13 @@ test("normalizes Arabic and Persian digits and parses DMY dates", () => {
   assert.equal(normalizeDigits("١٢۳"), "123");
   assert.equal(parseDate("١٢/٠٩/٢٠٢٦"), "2026-09-12");
 });
+
+test("parses Arabic Gregorian dates from official military announcements", () => {
+  assert.equal(parseArabicGregorianDate("الموافق 22 أبريل 2026 م"), "2026-04-22");
+  assert.equal(parseArabicGregorianDate("الموافق 07 أكتوبر 2026 م"), "2026-10-07");
+  assert.equal(parseArabicGregorianDate("22/04/2026"), "2026-04-22");
+});
+
 
 test("extracts stable external IDs from official job URLs", () => {
   assert.equal(externalIdFromUrl("https://careers.example.sa/job/X/1368425923/"), "1368425923");
