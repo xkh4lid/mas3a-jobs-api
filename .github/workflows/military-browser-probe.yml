@@ -38,6 +38,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium
+        if: github.event_name != 'pull_request'
         working-directory: military-probe
         run: npx playwright install --with-deps chromium
 
@@ -51,8 +52,15 @@ jobs:
           node --test agents/spec/*.test.mjs
 
       - name: Probe public official military sources
+        if: github.event_name != 'pull_request'
         working-directory: military-probe
         run: npm run probe
+
+      - name: Use synthetic agent input for pull-request checks
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p military-probe/output
+          cp agents/spec/fixture-report.json military-probe/output/report.json
 
       - name: Run Masaa read-only agent coordination
         run: |
