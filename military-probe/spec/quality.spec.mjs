@@ -95,3 +95,14 @@ test("rejects invalid calendar date fields", () => {
   });
   assert.equal(result.publishable,false);
 });
+
+test("uses Saudi local date rather than UTC at midnight", () => {
+  const almostMidnightUTC = new Date("2026-10-11T22:30:00Z"); // 12 Oct in Riyadh
+  const expiredAtRiyadhMidnight = assessMilitaryAnnouncement({
+    ...valid,
+    now: almostMidnightUTC,
+    text: posted + "استقبال طلبات القبول من 05/10/2026 حتى 11/10/2026."
+  });
+  assert.equal(expiredAtRiyadhMidnight.publishable, false);
+  assert.equal(expiredAtRiyadhMidnight.status, "closed_or_expired");
+});
