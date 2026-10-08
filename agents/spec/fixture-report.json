@@ -1,0 +1,68 @@
+{
+  "generatedAt": "2026-10-08T00:00:00.000Z",
+  "engine": {
+    "playwright": "fixture",
+    "crawlee": "fixture"
+  },
+  "policy": {
+    "bypassCaptcha": false,
+    "bypassLogin": false,
+    "officialPublicPagesOnly": true
+  },
+  "sources": [
+    {
+      "sourceKey": "spa-military",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "sourceKey": "absher-jobs",
+      "ok": false,
+      "status": null,
+      "error": "timed out"
+    }
+  ],
+  "sitemap": {
+    "ok": true,
+    "candidates": 1,
+    "error": null
+  },
+  "candidates": [
+    {
+      "sourceKey": "spa-military",
+      "sourceName": "وكالة الأنباء السعودية",
+      "sourceUrl": "https://www.spa.gov.sa/ar/N300001",
+      "status": 200,
+      "title": "فتح باب القبول والتسجيل الموحد بقطاعات عسكرية (اختبار فقط)",
+      "militarySignal": true,
+      "closed": false,
+      "challenge": false,
+      "auth": false,
+      "publishable": true,
+      "applyLinks": [
+        {
+          "url": "https://jobs.sa/"
+        }
+      ],
+      "bodyPreview": "Synthetic test data. Not a real job."
+    },
+    {
+      "sourceKey": "spa-military",
+      "sourceUrl": "https://www.spa.gov.sa/ar/N300002",
+      "status": 200,
+      "title": "وظائف عسكرية من مصدر غير رسمي (اختبار)",
+      "militarySignal": true,
+      "closed": false,
+      "challenge": false,
+      "auth": false,
+      "publishable": false,
+      "applyLinks": [
+        {
+          "url": "https://untrusted.example/apply"
+        }
+      ],
+      "bodyPreview": "Synthetic test data. Not a real job."
+    }
+  ],
+  "publishable": []
+}

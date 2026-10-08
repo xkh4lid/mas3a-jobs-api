@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - "military-probe/**"
+      - ".agents/**"
+      - "agents/**"
       - ".github/workflows/military-browser-probe.yml"
   push:
     branches: [main]
     paths:
       - "military-probe/**"
+      - ".agents/**"
+      - "agents/**"
       - ".github/workflows/military-browser-probe.yml"
   schedule:
     - cron: "23 */6 * * *"
@@ -34,6 +38,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium
+        if: github.event_name != 'pull_request'
         working-directory: military-probe
         run: npx playwright install --with-deps chromium
 
@@ -41,9 +46,28 @@ jobs:
         working-directory: military-probe
         run: npm run check
 
+      - name: Verify Masaa agent policy and tests
+        run: |
+          node --check agents/coordinate.mjs
+          node --test agents/spec/*.test.mjs
+
       - name: Probe public official military sources
+        if: github.event_name != 'pull_request'
         working-directory: military-probe
         run: npm run probe
+
+      - name: Use synthetic agent input for pull-request checks
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p military-probe/output
+          cp agents/spec/fixture-report.json military-probe/output/report.json
+
+      - name: Run Masaa read-only agent coordination
+        run: |
+          node agents/coordinate.mjs \
+            --input military-probe/output/report.json \
+            --out military-probe/output/agent-review.json
+          cat military-probe/output/agent-review.md
 
       - name: Show summary
         if: always()
