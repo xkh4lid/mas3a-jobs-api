@@ -1,6 +1,7 @@
 import { PlaywrightCrawler } from "crawlee";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { assessMilitaryAnnouncement } from "./quality.mjs";
 
 export const MILITARY_KEYWORDS = [
   "فتح باب",
@@ -446,20 +447,20 @@ async function inspectArticle(page, request, response) {
   const auth = isAuthText(combined);
   const sourceUrl = page.url();
   const sourceTrusted = isAllowedHttpsUrl(sourceUrl, meta.officialHosts);
-  const publishable = Boolean(
-    sourceTrusted &&
-    militarySignal &&
-    !closed &&
-    !challenge &&
-    applyLinks.length > 0
-  );
-
-  const reasons = [];
-  if (!sourceTrusted) reasons.push("untrusted_source_url");
-  if (!militarySignal) reasons.push("missing_military_signal");
-  if (closed) reasons.push("closed");
-  if (challenge) reasons.push("challenge");
-  if (applyLinks.length === 0) reasons.push("missing_official_apply_link");
+  // An announcement is not "open" just because it contains a recruitment
+  // phrase and a jobs.sa link; its Gregorian application window must be current.
+  const quality = assessMilitaryAnnouncement({
+    title,
+    text: bodyText,
+    sourceTrusted,
+    responseStatus: status,
+    closed,
+    challenge,
+    auth,
+    applyLinks
+  });
+  const publishable = quality.publishable;
+  const reasons = quality.reasons;
 
   return {
     sourceKey: meta.sourceKey,
@@ -472,6 +473,8 @@ async function inspectArticle(page, request, response) {
     challenge,
     auth,
     publishable,
+    statusLabel: quality.status,
+    applicationWindow: quality.window,
     reasons,
     applyLinks,
     bodyPreview: bodyText.slice(0, 1800)
@@ -648,11 +651,12 @@ export async function runProbe() {
     "## Candidate announcements",
     "",
     articleResults.length
-      ? "| Source | Publishable | Title | Apply links | Reasons |\n| --- | --- | --- | ---: | --- |\n" +
+      ? "| Source | Status | Publishable | Title | Apply links | Reasons |\n| --- | --- | --- | --- | ---: | --- |\n" +
         articleResults.map((item) =>
           "| " +
           [
             item.sourceKey,
+            item.statusLabel || "unavailable",
             item.publishable ? "yes" : "no",
             clean(item.title).replace(/\|/g, "\\|"),
             String(item.applyLinks?.length || 0),
