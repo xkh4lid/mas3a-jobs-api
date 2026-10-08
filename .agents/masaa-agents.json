@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "origin": "https://github.com/ruvnet/ruflo/blob/main/.agents/skills/agent-coordination/SKILL.md",
+  "framework": "ruflo",
+  "topology": "hierarchical",
+  "maxAgents": 6,
+  "execution": "read_only",
+  "llm": "disabled_by_default",
+  "automaticBilling": false,
+  "productionWrites": false,
+  "roles": [
+    {
+      "name": "masaa-coordinator",
+      "rufloType": "hierarchical-coordinator",
+      "task": "Combine independent agent findings; never authorize deployment or publication"
+    },
+    {
+      "name": "masaa-source-researcher",
+      "rufloType": "researcher",
+      "task": "Inspect official Saudi military source coverage and failures"
+    },
+    {
+      "name": "masaa-trust-reviewer",
+      "rufloType": "reviewer",
+      "task": "Require official source and official apply links; reject blocked/closed/unauthenticated results"
+    },
+    {
+      "name": "masaa-dedupe-reviewer",
+      "rufloType": "tester",
+      "task": "Find duplicate URLs and avoid duplicate publications"
+    },
+    {
+      "name": "masaa-security-auditor",
+      "rufloType": "security-auditor",
+      "task": "Audit link trust, suspicious redirects, challenge/login signals"
+    },
+    {
+      "name": "masaa-release-reviewer",
+      "rufloType": "pr-manager",
+      "task": "Write read-only review report; cannot merge or publish"
+    }
+  ]
+}
