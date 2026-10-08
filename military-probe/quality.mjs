@@ -69,7 +69,15 @@ export function assessMilitaryAnnouncement({
     !RESULTS_ONLY.test(heading);
 
   const window = extractGregorianApplicationWindow(focused);
-  const day = now.toISOString().slice(0, 10);
+  // Application dates follow Saudi local calendar days (UTC+3), not UTC.
+  const saudiParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Riyadh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const part = (type) => saudiParts.find((item) => item.type === type)?.value || "";
+  const day = `${part("year")}-${part("month")}-${part("day")}`;
   const reasons = [];
   if (!sourceTrusted) reasons.push("untrusted_source");
   if (responseStatus !== null && (responseStatus < 200 || responseStatus >= 400)) reasons.push("bad_http_status");
