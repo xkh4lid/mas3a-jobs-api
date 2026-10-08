@@ -12,7 +12,7 @@ const MILITARY_CONTEXT = /(?:عسكري|العسكرية|التجنيد|وزار
 const RESULTS_ONLY = /(?:نتائج\s+القبول|القبول\s+المبدئي|الترشيح\s+المبدئي|أسماء\s+المرشحين|مواعيد\s+المطابقة)/u;
 const GREGORIAN_DATE = String.raw`(\d{1,2})\s*[/-]\s*(\d{1,2})\s*[/-]\s*(20\d{2})`;
 const DATE_RANGE = new RegExp(
-  String.raw`(?:\bمن\b|ابتداءً?\s+من|اعتبارًا\s+من)[\s\S]{0,180}?${GREGORIAN_DATE}[\s\S]{0,250}?(?:حتى|إلى|وينتهي|وتنتهي)[\s\S]{0,180}?${GREGORIAN_DATE}`,
+  String.raw`(?:من|ابتداءً?\s+من|اعتبارًا\s+من)[\s\S]{0,180}?${GREGORIAN_DATE}[\s\S]{0,250}?(?:حتى|إلى|وينتهي|وتنتهي)[\s\S]{0,180}?${GREGORIAN_DATE}`,
   "u"
 );
 const CLOSING_DATE = new RegExp(
