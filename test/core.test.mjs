@@ -9,6 +9,7 @@ import {
   externalIdFromUrl,
   normalizeDigits,
   parseDate,
+  parseArabicGregorianDate,
   isAllowedOfficialUrl,
   stableTextId,
   successFactorsSearchUrls,
@@ -43,6 +44,13 @@ test("normalizes Arabic and Persian digits and parses DMY dates", () => {
   assert.equal(normalizeDigits("١٢۳"), "123");
   assert.equal(parseDate("١٢/٠٩/٢٠٢٦"), "2026-09-12");
 });
+
+test("parses Arabic Gregorian dates from official military announcements", () => {
+  assert.equal(parseArabicGregorianDate("الموافق 22 أبريل 2026 م"), "2026-04-22");
+  assert.equal(parseArabicGregorianDate("الموافق 07 أكتوبر 2026 م"), "2026-10-07");
+  assert.equal(parseArabicGregorianDate("22/04/2026"), "2026-04-22");
+});
+
 
 test("extracts stable external IDs from official job URLs", () => {
   assert.equal(externalIdFromUrl("https://careers.example.sa/job/X/1368425923/"), "1368425923");
@@ -105,26 +113,27 @@ test("extracts official listing candidates without fetching every detail page", 
 });
 
 
-test("discovers only strong official SPA military recruitment announcements", () => {
+test("discovers legacy and modern official SPA military recruitment announcements", () => {
   const source = {
     key: "spa-military",
     host: "www.spa.gov.sa",
     company: "الجهات العسكرية السعودية",
     sector: "عسكري",
-    articlePath: /^\/N\d+$/i,
-    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa"],
+    articlePath: /^\/(?:ar\/)?N\d+$/i,
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa"],
     listingKeywords: ["فتح باب", "القبول والتسجيل"],
     excludeKeywords: ["نتائج", "المرشحين"],
     keywords: ["فتح باب", "القبول والتسجيل"]
   };
   const html = [
     '<a href="/N300001">فتح باب القبول والتسجيل الموحد على رتبة جندي</a>',
-    '<a href="/N300002">نتائج المرشحين للقبول والتسجيل</a>',
-    '<a href="https://evil.example/N300003">فتح باب القبول والتسجيل</a>'
+    '<a href="/ar/N300004">فتح باب القبول والتسجيل في القوات المسلحة</a>',
+    '<a href="/ar/N300002">نتائج المرشحين للقبول والتسجيل</a>',
+    '<a href="https://evil.example/ar/N300003">فتح باب القبول والتسجيل</a>'
   ].join("");
   assert.deepEqual(
     discoverArticleUrls(html, source, "https://www.spa.gov.sa/news/latest-news?page=1"),
-    ["https://www.spa.gov.sa/N300001"]
+    ["https://www.spa.gov.sa/N300001", "https://www.spa.gov.sa/ar/N300004"]
   );
 });
 
@@ -135,8 +144,8 @@ test("accepts a SPA recruitment announcement only with an official apply link", 
     company: "الجهات العسكرية السعودية",
     sector: "عسكري",
     listingUrls: ["https://www.spa.gov.sa/news/latest-news?page=1"],
-    articlePath: /^\/N\d+$/i,
-    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa"],
+    articlePath: /^\/(?:ar\/)?N\d+$/i,
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa"],
     keywords: ["فتح باب", "القبول والتسجيل"],
     excludeKeywords: ["نتائج", "المرشحين"]
   };
@@ -146,6 +155,27 @@ test("accepts a SPA recruitment announcement only with an official apply link", 
   assert.equal(job.external_id, "N300001");
   assert.equal(job.company, "وزارة الداخلية");
   assert.equal(job.apply_url, "https://jobs.sa/");
+});
+
+
+test("accepts a modern SPA article with an official MOD admissions link", () => {
+  const source = {
+    key: "spa-military",
+    host: "www.spa.gov.sa",
+    company: "الجهات العسكرية السعودية",
+    sector: "عسكري",
+    listingUrls: ["https://www.spa.gov.sa/news/latest-news?page=1"],
+    articlePath: /^\/(?:ar\/)?N\d+$/i,
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa"],
+    keywords: ["فتح باب", "القبول والتسجيل"],
+    excludeKeywords: ["نتائج", "المرشحين"]
+  };
+  const html = '<h1>فتح باب القبول والتسجيل في القوات المسلحة</h1><p>أعلنت وزارة الدفاع فتح باب القبول والتسجيل.</p><a href="https://afca.mod.gov.sa/">التقديم</a>';
+  const job = extractMilitaryAnnouncement(html, source, "https://www.spa.gov.sa/ar/N300004");
+  assert.ok(job);
+  assert.equal(job.external_id, "N300004");
+  assert.equal(job.company, "وزارة الدفاع");
+  assert.equal(job.apply_url, "https://afca.mod.gov.sa/");
 });
 
 

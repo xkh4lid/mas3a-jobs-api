@@ -171,7 +171,9 @@ const MILITARY_NEWS_SOURCES = [
       "https://www.sang.gov.sa/MediaAffairs/MONGNews/Pages/default.aspx"
     ],
     articlePath: /\/MediaAffairs\/MONGNews\/\d+\/Pages\/[^?#]+\.aspx/i,
-    applyHosts: ["jobs.sang.gov.sa", "jobs.sa"],
+    applyHosts: ["jobs.sang.gov.sa", "jobs.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"],
+    listingKeywords: ["فتح باب", "القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "الالتحاق بالخدمة العسكرية"],
+    excludeKeywords: ["نتائج", "المرشحين", "المرشحات", "القبول المبدئي", "المقبولين", "المقبولات"],
     keywords: ["القبول والتسجيل", "الخدمة العسكرية", "تجنيد", "وظائف عسكرية", "رتبة", "الالتحاق بالخدمة العسكرية"]
   },
   {
@@ -181,10 +183,12 @@ const MILITARY_NEWS_SOURCES = [
     sector: "عسكري",
     host: "www.spa.gov.sa",
     listingUrls: [
-      "https://www.spa.gov.sa/news/latest-news?page=1"
+      "https://www.spa.gov.sa/news/latest-news?page=1",
+      "https://www.spa.gov.sa/search?q=%D8%A7%D9%84%D8%AA%D8%AC%D9%86%D9%8A%D8%AF%20%D8%A7%D9%84%D9%85%D9%88%D8%AD%D8%AF",
+      "https://www.spa.gov.sa/search?q=%D8%A3%D8%A8%D8%B4%D8%B1%20%D8%AA%D9%88%D8%B8%D9%8A%D9%81"
     ],
-    articlePath: /^\/N\d+$/i,
-    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa"],
+    articlePath: /^\/(?:ar\/)?N\d+$/i,
+    applyHosts: ["jobs.sa", "tajnid.mod.gov.sa", "jobs.sang.gov.sa", "afca.mod.gov.sa", "kkmar.gov.sa", "www.kkmar.gov.sa"],
     listingKeywords: [
       "فتح باب", "القبول والتسجيل", "القبول الموحد", "التجنيد الموحد",
       "استقبال طلبات", "بدء التقديم", "رتبة جندي", "رتبة جندي أول",
@@ -509,6 +513,46 @@ function parseDmyDate(value) {
   const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const date = new Date(`${iso}T12:00:00Z`);
   return Number.isNaN(date.getTime()) ? null : iso;
+}
+
+function parseArabicGregorianDate(value) {
+  const text = clean(normalizeDigits(value)).replace(/[\u200e\u200f\u202a-\u202e]/g, "");
+  const numeric = parseDmyDate(text);
+  if (numeric) return numeric;
+
+  const months = {
+    "يناير": 1,
+    "فبراير": 2,
+    "مارس": 3,
+    "أبريل": 4,
+    "ابريل": 4,
+    "مايو": 5,
+    "يونيو": 6,
+    "يوليو": 7,
+    "أغسطس": 8,
+    "اغسطس": 8,
+    "سبتمبر": 9,
+    "أكتوبر": 10,
+    "اكتوبر": 10,
+    "نوفمبر": 11,
+    "ديسمبر": 12
+  };
+  const names = Object.keys(months)
+    .sort((a, b) => b.length - a.length)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const match = text.match(new RegExp("\\b(\\d{1,2})\\s+(" + names + ")\\s+(20\\d{2})\\b", "i"));
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = months[match[2]];
+  const year = Number(match[3]);
+  if (!day || !month || day > 31) return null;
+
+  const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const date = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.getUTCDate() !== day || date.getUTCMonth() + 1 !== month) return null;
+  return iso;
 }
 
 function addDays(isoDate, days) {
@@ -1554,7 +1598,7 @@ function extractMilitaryAnnouncement(html, source, url) {
   // We only inspect links currently surfaced by the official news listing, so when
   // no Gregorian date is present we use first discovery time instead of guessing a
   // Hijri conversion. This prevents old archive pages from being presented as live.
-  const parsedPublishedAt = parseDmyDate(text);
+  const parsedPublishedAt = parseArabicGregorianDate(text);
   if (parsedPublishedAt && daysSince(parsedPublishedAt) > 35) return null;
   // لا نخمن تاريخ نشر ميلادي عندما يحتوي الإعلان على هجري فقط.
   // discovered_at في قاعدة البيانات يبقى المرجع الثابت لأول اكتشاف.
@@ -1572,7 +1616,7 @@ function extractMilitaryAnnouncement(html, source, url) {
   const summary = removeBoilerplate(summaryMatch?.[0] || text).slice(0, 650);
   const parsedUrl = new URL(url);
   const pathMatch = parsedUrl.pathname.match(/\/MONGNews\/([^/]+)\/Pages\/([^/.]+)/i);
-  const spaMatch = parsedUrl.pathname.match(/^\/N(\d+)$/i);
+  const spaMatch = parsedUrl.pathname.match(/^\/(?:ar\/)?N(\d+)$/i);
   const slug = pathMatch
     ? pathMatch[1] + "-" + pathMatch[2]
     : spaMatch
@@ -3331,6 +3375,9 @@ async function quarantineInvalidMilitaryJobs(env) {
            apply_url NOT LIKE 'https://jobs.sang.gov.sa/%'
            AND apply_url NOT LIKE 'https://jobs.sa/%'
            AND apply_url NOT LIKE 'https://tajnid.mod.gov.sa/%'
+           AND apply_url NOT LIKE 'https://afca.mod.gov.sa/%'
+           AND apply_url NOT LIKE 'https://kkmar.gov.sa/%'
+           AND apply_url NOT LIKE 'https://www.kkmar.gov.sa/%'
          )
        )`
   ).bind(timestamp).run();
@@ -5784,7 +5831,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {

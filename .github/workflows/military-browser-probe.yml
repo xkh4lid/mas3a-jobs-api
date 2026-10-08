@@ -1,0 +1,61 @@
+name: Military Browser Probe
+
+on:
+  pull_request:
+    paths:
+      - "military-probe/**"
+      - ".github/workflows/military-browser-probe.yml"
+  push:
+    branches: [main]
+    paths:
+      - "military-probe/**"
+      - ".github/workflows/military-browser-probe.yml"
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe official military sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install probe dependencies
+        working-directory: military-probe
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        working-directory: military-probe
+        run: npx playwright install --with-deps chromium
+
+      - name: Validate parser and safety rules
+        working-directory: military-probe
+        run: npm run check
+
+      - name: Probe public official military sources
+        working-directory: military-probe
+        run: npm run probe
+
+      - name: Show summary
+        if: always()
+        working-directory: military-probe
+        run: |
+          test -f output/summary.md && cat output/summary.md || true
+
+      - name: Upload probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: masaa-military-browser-probe
+          path: military-probe/output/
+          if-no-files-found: warn
+          retention-days: 7
