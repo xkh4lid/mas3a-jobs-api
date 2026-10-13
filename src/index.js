@@ -400,6 +400,18 @@ const OFFICIAL_LISTING_SOURCES = [
     listingUrls: ["https://www.moh.gov.sa/ministry/about/pages/work-for-us.aspx"],
     parser: "moh-current",
     sourceType: "official_listing"
+  },
+  {
+    key: "uqu-scholarships-fund",
+    name: "جامعة أم القرى - وظائف الصندوق الخيري",
+    company: "جامعة أم القرى",
+    companyAr: "جامعة أم القرى",
+    sector: "حكومي",
+    host: "uqu.edu.sa",
+    url: "https://uqu.edu.sa/studaff/152230",
+    listingUrls: ["https://uqu.edu.sa/studaff/152230"],
+    parser: "uqu-fund",
+    sourceType: "official_listing"
   }
 ];
 
@@ -2179,10 +2191,53 @@ function extractMohCurrentJobs(html, source) {
   };
 }
 
+// Two official UQU scholarship-fund application forms, advertised until
+// 31 October 2026 on the university's own student-affairs listing.
+function extractUquFundJobs(html, source) {
+  const raw = String(html || "");
+  const visible = stripHtml(raw);
+  if (!/وظائف الصندوق الخيري|للتقديم على وظائف الصندوق الخيري/.test(visible)) {
+    return { parsed: false, jobs: [] };
+  }
+  const entries = [
+    { id: "145015", title: "محاسب" },
+    { id: "145115", title: "مشرف برامج ومشاريع" }
+  ];
+  const jobs = entries.filter(({ id, title }) => {
+    const formPattern = new RegExp(`/App/Forms/Show/${id}(?:["'?#\\s<]|$)`, "i");
+    return formPattern.test(raw) && visible.includes(title);
+  }).map(({ id, title }) => ({
+    external_id: `uqu-fund-${id}`,
+    title,
+    company: "جامعة أم القرى",
+    sector: "حكومي",
+    city: "مكة المكرمة",
+    region: "مكة المكرمة",
+    work_mode: "حضوري",
+    qualification: null,
+    specialization: null,
+    experience: null,
+    salary: null,
+    published_at: "2026-09-17",
+    expires_at: "2026-10-31",
+    summary: "توظيف بنظام التعاقد لدى الصندوق الخيري لدعم برامج المنح في جامعة أم القرى. التسجيل عبر نموذج الجامعة الرسمي، ويشترط التحقق من متطلبات الوظيفة بالمصدر.",
+    source_url: source.url,
+    apply_url: `https://uqu.edu.sa/studaff/App/Forms/Show/${id}`,
+    remote: 0,
+    fresh_graduate: 0,
+    no_experience: 0
+  }));
+  return { parsed: true, jobs, explicitNoJobs: false };
+}
+
 async function syncOfficialListingSource(env, source) {
   try {
     const html = await fetchText(source.url);
-    const extracted = source.parser === "moh-current" ? extractMohCurrentJobs(html, source) : { parsed: false, jobs: [] };
+    const extracted = source.parser === "moh-current"
+      ? extractMohCurrentJobs(html, source)
+      : source.parser === "uqu-fund"
+        ? extractUquFundJobs(html, source)
+        : { parsed: false, jobs: [] };
     if (!extracted.parsed || (extracted.jobs.length === 0 && extracted.explicitNoJobs !== true)) {
       const message = !extracted.parsed
         ? "Official listing loaded but its expected structure was not found; no jobs were changed."
@@ -2196,7 +2251,7 @@ async function syncOfficialListingSource(env, source) {
     const seen = [];
     for (const job of extracted.jobs) {
       seen.push(job.external_id);
-      const result = await saveJob(env, source, job, source.key === "moh-jobs" ? { skipLocalization: true } : {});
+      const result = await saveJob(env, source, job, ["moh-jobs", "uqu-scholarships-fund"].includes(source.key) ? { skipLocalization: true } : {});
       if (result.added) added += 1;
       if (result.updated) updated += 1;
     }
@@ -3952,7 +4007,7 @@ async function runSync(env, options = {}) {
   }
   // Allow authenticated, targeted refreshes of official public-sector sources.
   // Previously /sync?source=moh-jobs always returned unknown_source.
-  if (sourceKey === "moh-jobs") return runOfficialSectorBatch(env, [sourceKey]);
+  if (OFFICIAL_LISTING_SOURCES.some((item) => item.key === sourceKey)) return runOfficialSectorBatch(env, [sourceKey]);
   if (sourceKey === ROYAL_GUARD_NOTICE_SOURCE.key) return runOfficialSectorBatch(env, [sourceKey]);
   if (MILITARY_NEWS_SOURCES.some((item) => item.key === sourceKey)) {
     return runOfficialSectorBatch(env, [sourceKey]);
@@ -6044,7 +6099,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { extractMohCurrentJobs, publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { extractMohCurrentJobs, extractUquFundJobs, publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {
@@ -6076,7 +6131,7 @@ export default {
         syncResult = await runSupportBatch(env);
       } else if (new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) {
         // Check live official government recruitment every 15 minutes, not just hourly.
-        syncResult = await runOfficialSectorBatch(env, ["moh-jobs", "royal-guard-oct-2026"]);
+        syncResult = await runOfficialSectorBatch(env, ["moh-jobs", "uqu-scholarships-fund", "royal-guard-oct-2026"]);
       } else {
         const minute = new Date(controller.scheduledTime).getUTCMinutes();
         syncResult = await runSourceBatch(env, scheduledSourceKeyForMinute(minute));
