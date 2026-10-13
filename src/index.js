@@ -208,6 +208,19 @@ const MILITARY_NEWS_SOURCES = [
   }
 ];
 
+// Carefully dated military notice reproduced by major Saudi news outlets.
+// The application link is the government-operated Royal Guard portal. Do not
+// mislabel the press report as an independently verified official announcement.
+const ROYAL_GUARD_NOTICE_SOURCE = {
+  key: "royal-guard-oct-2026",
+  name: "الحرس الملكي — إعلان القبول أكتوبر 2026",
+  company: "رئاسة الحرس الملكي",
+  sector: "عسكري",
+  host: "sabq.org",
+  listingUrls: ["https://sabq.org/article/ynnd97u"],
+  applyHosts: ["irec.srg.gov.sa"]
+};
+
 const EWDIFH_SOURCE = {
   key: "ewdifh",
   name: "أي وظيفة — مصدر اكتشاف",
@@ -276,6 +289,16 @@ const SOURCE_CATALOG = [
     supported: 1,
     status: "pending"
   })),
+  {
+    key: ROYAL_GUARD_NOTICE_SOURCE.key,
+    name: ROYAL_GUARD_NOTICE_SOURCE.name,
+    url: ROYAL_GUARD_NOTICE_SOURCE.listingUrls[0],
+    source_type: "official_news",
+    sector: "عسكري",
+    enabled: 1,
+    supported: 1,
+    status: "pending"
+  },
   ...MILITARY_NEWS_SOURCES.map((source) => ({
     key: source.key,
     name: source.name,
@@ -3766,6 +3789,14 @@ async function runSupportBatch(env) {
     results.push(result);
   }
 
+  const guardResult = await syncRoyalGuardNotice(env);
+  sourcesChecked += 1;
+  jobsSeen += guardResult.jobsSeen || 0;
+  jobsAdded += guardResult.added || 0;
+  jobsUpdated += guardResult.updated || 0;
+  errors += guardResult.errors || 0;
+  results.push(guardResult);
+
   const discoveryResult = await syncEwdifhDiscoverySource(env, EWDIFH_SOURCE, 10);
   sourcesChecked += 1;
   jobsSeen += discoveryResult.jobsSeen || 0;
@@ -3809,6 +3840,63 @@ async function runSupportBatch(env) {
 }
 
 // Keep government and military refreshes independent from the lengthy private-job batch.
+async function syncRoyalGuardNotice(env) {
+  const source = ROYAL_GUARD_NOTICE_SOURCE;
+  const opens = "2026-10-11T00:00:00+03:00";
+  const closes = "2026-10-15T23:59:59+03:00";
+  const now = Date.now();
+  if (now < Date.parse(opens) || now > Date.parse(closes)) {
+    await upsertSource(env, source, { success: true, jobsSeen: 0, newJobs: 0, status: "ok" }, "official_news");
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 0, outside_application_window: true };
+  }
+
+  const job = {
+    external_id: "royal-guard-2026-10-11",
+    title: "الحرس الملكي: فتح القبول لرتبتي جندي وجندي أول",
+    company: "رئاسة الحرس الملكي",
+    sector: "عسكري",
+    city: "مختلف مناطق المملكة",
+    region: null,
+    work_mode: "حضوري",
+    qualification: "الثانوية العامة أو الدبلوم أو البكالوريوس بحسب الرتبة والتخصص",
+    specialization: "قبول عسكري",
+    experience: null,
+    salary: null,
+    published_at: "2026-10-04",
+    expires_at: "2026-10-15",
+    summary: "فتح التسجيل للرجال من خريجي العام 1447/1448هـ خلال 11–15 أكتوبر 2026. نُقل الإعلان في صحف سعودية، ورابط التقديم المعلن يتبع رئاسة الحرس الملكي. تحقق من عمل بوابة القبول وشروطها قبل التقديم.",
+    source_url: source.listingUrls[0],
+    apply_url: "https://irec.srg.gov.sa/",
+    remote: 0,
+    fresh_graduate: 1,
+    no_experience: 0
+  };
+
+  // Confirm the news report still contains the official portal and stated
+  // deadline; never silently promote an unsupported manually curated notice.
+  try {
+    const page = await fetchText(source.listingUrls[0], { attempts: 2 });
+    const text = stripHtml(page);
+    if (!/الحرس الملكي/.test(text) || !/(?:جندي أول|جندي\s+أول)/.test(text) ||
+        !/irec\.srg\.gov\.sa/i.test(page) || !/15\s*\/\s*10\s*\/\s*2026/.test(text)) {
+      throw new Error("News report no longer confirms the application portal and closing date");
+    }
+    const result = await saveJob(env, source, job, { skipLocalization: true });
+    await upsertSource(env, source, {
+      success: !result.rejected,
+      jobsSeen: result.rejected ? 0 : 1,
+      newJobs: result.added ? 1 : 0,
+      error: result.rejected || null,
+      status: result.rejected ? "needs_review" : "ok"
+    }, "official_news");
+    return { source: source.key, jobsSeen: result.rejected ? 0 : 1, added: Number(Boolean(result.added)), updated: Number(Boolean(result.updated)), errors: Number(Boolean(result.rejected)), rejected: result.rejected || null };
+  } catch (error) {
+    const message = clean(error?.message || error);
+    await upsertSource(env, source, { success: false, jobsSeen: 0, error: message, status: "needs_review" }, "official_news");
+    return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
+  }
+}
+
 async function runOfficialSectorBatch(env, onlyKeys = []) {
   const active = await activeSyncRun(env);
   if (active) return { ok: true, skipped: true, reason: "sync_already_running" };
@@ -3823,6 +3911,9 @@ async function runOfficialSectorBatch(env, onlyKeys = []) {
   for (const source of MILITARY_NEWS_SOURCES) {
     if (onlyKeys.length && !onlyKeys.includes(source.key)) continue;
     results.push(await syncMilitaryNewsSource(env, source));
+  }
+  if (!onlyKeys.length || onlyKeys.includes(ROYAL_GUARD_NOTICE_SOURCE.key)) {
+    results.push(await syncRoyalGuardNotice(env));
   }
   const summary = {
     sourcesChecked: results.length,
@@ -3851,6 +3942,7 @@ async function runSync(env, options = {}) {
   // Allow authenticated, targeted refreshes of official public-sector sources.
   // Previously /sync?source=moh-jobs always returned unknown_source.
   if (sourceKey === "moh-jobs") return runOfficialSectorBatch(env, [sourceKey]);
+  if (sourceKey === ROYAL_GUARD_NOTICE_SOURCE.key) return runOfficialSectorBatch(env, [sourceKey]);
   if (MILITARY_NEWS_SOURCES.some((item) => item.key === sourceKey)) {
     return runOfficialSectorBatch(env, [sourceKey]);
   }
@@ -3985,6 +4077,7 @@ function parseBoolean(value) {
 function sourceArabicCompany(sourceKey, currentCompany) {
   const source = SUCCESSFACTORS_SOURCES.find((item) => item.key === sourceKey)
     || MILITARY_NEWS_SOURCES.find((item) => item.key === sourceKey)
+    || (sourceKey === ROYAL_GUARD_NOTICE_SOURCE.key ? ROYAL_GUARD_NOTICE_SOURCE : null)
     || OFFICIAL_LISTING_SOURCES.find((item) => item.key === sourceKey);
   return arabicPublicText(source?.companyAr || source?.company || currentCompany, "الجهة المعلنة", 180);
 }
@@ -4063,8 +4156,10 @@ function publicArabicJob(row) {
   const city = /^(?:غير محددة|غير محدد|غير معروف(?:ة)?)$/i.test(clean(normalizedCity))
     ? null
     : arabicPublicText(normalizedCity, null, 120);
-  const title = jobTitleOverrideFromUrl(row.source_url)
-    || arabicPublicText(row.title, null, 220);
+  const title = row.source_key === "moh-jobs"
+    ? clean(row.title).replace(/وال\s+تمريض/u, "والتمريض")
+    : jobTitleOverrideFromUrl(row.source_url)
+      || arabicPublicText(row.title, null, 220);
 
   return {
     ...row,
@@ -4082,8 +4177,10 @@ function publicArabicJob(row) {
       "فرصة وظيفية لدى " + company + ". راجع رابط التقديم للاطلاع على التفاصيل والمتطلبات.",
       700
     ),
-    verification_level: row.status === "discovered" ? "discovery" : "official",
-    verification_label: row.status === "discovered"
+    verification_level: row.source_key === ROYAL_GUARD_NOTICE_SOURCE.key ? "reported" : row.status === "discovered" ? "discovery" : "official",
+    verification_label: row.source_key === ROYAL_GUARD_NOTICE_SOURCE.key
+      ? "نقل صحفي متعدد؛ رابط التقديم الحكومي معلن ولم يتم التحقق من عمل البوابة"
+      : row.status === "discovered"
       ? ({
           "ewdifh": "اكتشاف عبر أي وظيفة — رابط التقديم لدى الجهة",
           "wadhefa-com": "اكتشاف عبر وظيفة.كوم — راجع المصدر وطريقة التقديم",
