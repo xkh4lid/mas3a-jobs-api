@@ -217,7 +217,7 @@ const ROYAL_GUARD_NOTICE_SOURCE = {
   company: "رئاسة الحرس الملكي",
   sector: "عسكري",
   host: "sabq.org",
-  listingUrls: ["https://sabq.org/article/ynnd97u"],
+  listingUrls: ["https://sabq.org/article/ynnd97u", "https://news-ajel.com/ar/saudi/royal-guard-opens-applications-for-the-ranks-of-soldier-and-first-soldier-men"],
   applyHosts: ["irec.srg.gov.sa"]
 };
 
@@ -3875,12 +3875,23 @@ async function syncRoyalGuardNotice(env) {
   // Confirm the news report still contains the official portal and stated
   // deadline; never silently promote an unsupported manually curated notice.
   try {
-    const page = await fetchText(source.listingUrls[0], { attempts: 2 });
-    const text = stripHtml(page);
-    if (!/الحرس الملكي/.test(text) || !/(?:جندي أول|جندي\s+أول)/.test(text) ||
-        !/irec\.srg\.gov\.sa/i.test(page) || !/15\s*\/\s*10\s*\/\s*2026/.test(text)) {
-      throw new Error("News report no longer confirms the application portal and closing date");
+    let verifiedReport = false;
+    for (const reportUrl of source.listingUrls) {
+      try {
+        const page = await fetchText(reportUrl, { attempts: 1 });
+        const text = stripHtml(page);
+        const matchesTitle = /الحرس الملكي/.test(text) && /جندي\s*أول/.test(text);
+        const matchesPortal = /irec\.srg\.gov\.sa/i.test(page);
+        const matchesDeadline = /15\s*\/\s*10\s*\/\s*2026|15\s+أكتوبر\s+2026/.test(text);
+        if (matchesTitle && matchesPortal && matchesDeadline) {
+          verifiedReport = true;
+          break;
+        }
+      } catch {
+        // Try a second independently published report on temporary fetch failures.
+      }
     }
+    if (!verifiedReport) throw new Error("Neither news report confirms the application deadline and official portal");
     const result = await saveJob(env, source, job, { skipLocalization: true });
     await upsertSource(env, source, {
       success: !result.rejected,
