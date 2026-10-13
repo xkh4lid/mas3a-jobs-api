@@ -3992,7 +3992,12 @@ function publicArabicJob(row) {
   const urlLocationPrefix = (() => {
     try {
       const parsed = new URL(row.source_url || row.apply_url);
-      return parsed.pathname.split(/\/job\//i)[0];
+      const pathParts = parsed.pathname.split(/\/job\//i);
+      const prefix = pathParts[0];
+      // SuccessFactors often embeds the city at the beginning of the job slug.
+      const slug = pathParts[1] ? decodeURIComponent(pathParts[1].split("/")[0]) : "";
+      const slugCity = slug.match(/^(Riyadh|Jeddah|Jubail|Yanbu|Dammam|Dhahran|Khobar|Tabuk|Abha|Jazan|Najran|Rabigh|Makkah|Mecca|Madinah|Medina)(?:-|$)/i)?.[1] || "";
+      return prefix + " " + slugCity;
     } catch { return ""; }
   })();
   const cityFromUrl = listingCityFromText(urlLocationPrefix);
