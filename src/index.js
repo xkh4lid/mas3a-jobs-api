@@ -1029,8 +1029,13 @@ function discoverArticleUrls(html, source, baseUrl) {
     const url = absoluteUrl(match[1], baseUrl);
     const anchorText = stripHtml(match[2] || "");
 
+    // News cards often put their headline in a sibling heading, not the link.
+    // Validate the official article URL first, then inspect the surrounding card
+    // before applying keyword filters. A generic "اقرأ المزيد" is not a title.
+    const cardText = stripHtml(normalized.slice(Math.max(0, match.index - 1100), Math.min(normalized.length, hrefRegex.lastIndex + 250)));
+    const discoveryText = clean(anchorText + " " + cardText);
     if (Array.isArray(source.listingKeywords) && source.listingKeywords.length > 0) {
-      const hasListingSignal = source.listingKeywords.some((keyword) => anchorText.includes(keyword));
+      const hasListingSignal = source.listingKeywords.some((keyword) => discoveryText.includes(keyword));
       if (!hasListingSignal) continue;
     }
 
@@ -1215,6 +1220,8 @@ function dedupeRepeatedFieldText(value) {
 function sanitizeQualificationField(value) {
   let text = dedupeRepeatedFieldText(value);
   if (!text || containsCookieNoise(text)) return null;
+  // Discard obvious scraped fragments instead of presenting them as qualifications.
+  if (/^[:×\s-]+/.test(text) && text.length < 70) return null;
 
   text = clean(text)
     .replace(/(?:\s+(?:المؤهل|المؤهلات|التعليم|Education|Qualifications?)\s*:?\s*){2,}/gi, " ")
@@ -1237,6 +1244,8 @@ function sanitizeQualificationField(value) {
 function sanitizeExperienceField(value) {
   let text = dedupeRepeatedFieldText(value);
   if (!text || containsCookieNoise(text)) return null;
+  // A navigation breadcrumb or level marker is not professional experience.
+  if (/^(?:مستوى\s*[×x]|[×x]\s*|\/\s*)/i.test(text)) return null;
 
   const contaminationMarkers = [
     "يرجى ملاحظة",
@@ -2090,29 +2099,40 @@ function stableTextId(prefixOrValue, maybeValue) {
 }
 
 function extractMohCurrentJobs(html, source) {
-  const text = stripHtml(html);
-  const currentIndex = text.indexOf("الوظائف الحالية");
-  if (currentIndex < 0) return { parsed: false, jobs: [] };
-  const previousIndex = text.indexOf("الوظائف السابقة", currentIndex + 1);
-  const section = text.slice(currentIndex, previousIndex > currentIndex ? previousIndex : Math.min(text.length, currentIndex + 5000));
-  const active = /(?:قائم|متاح|مفتوح)/.test(section);
-  if (!active) return { parsed: true, explicitNoJobs: true, jobs: [] };
+  const raw = String(html ?? "");
+  const currentHeading = raw.search(/الوظائف\s+الحالية/i);
+  if (currentHeading < 0) return { parsed: false, jobs: [] };
+  const afterHeading = raw.slice(currentHeading);
+  const previousHeading = afterHeading.search(/الوظائف\s+السابقة/i);
+  const currentSection = previousHeading >= 0 ? afterHeading.slice(0, previousHeading) : afterHeading.slice(0, 9000);
 
-  const titles = [];
-  const rx = /(إعلان\s+[^|•]{3,100}?)(?=\s+(?:من\s+بداية|إلى\s+نهاية|قائم|متاح|مفتوح|بداية\s+الإعلان|نهاية\s+الإعلان))/g;
-  let match;
-  while ((match = rx.exec(section))) {
-    const title = clean(match[1]).replace(/\s{2,}/g, " ");
-    if (title && !titles.includes(title)) titles.push(title);
+  // Read individual table rows, rather than matching arbitrary text across
+  // multiple announcements. Never count rows in "الوظائف السابقة".
+  const titles = new Set();
+  const rows = [...currentSection.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
+  for (const row of rows) {
+    const cells = [...row[1].matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)]
+      .map((match) => clean(stripHtml(match[1]).replace(/[\u200b-\u200f\ufeff]/g, "")));
+    if (cells.length < 2) continue;
+    const title = cells[0];
+    const state = cells.slice(1).join(" ");
+    if (!/^إعلان\s+.{3,180}$/u.test(title)) continue;
+    if (!/(?:قائم|متاح|مفتوح)/.test(state) || /(?:منتهي|انتهى|مغلق)/.test(state)) continue;
+    titles.add(title);
   }
-  if (!titles.length) {
-    const fallback = section.match(/(إعلان\s+[\u0600-\u06FF\s]+?)(?=\s+(?:من|إلى|قائم|متاح|مفتوح))/);
-    if (fallback?.[1]) titles.push(clean(fallback[1]));
+
+  // Defensive fallback for a non-tabular source: require the state adjacent
+  // to the title, and do not search beyond the current-jobs section.
+  if (rows.length === 0) {
+    const visible = stripHtml(currentSection).replace(/[\u200b-\u200f\ufeff]/g, "");
+    const match = visible.match(/(إعلان\s+[^|•]{3,140}?)\s+(?:من\s+بداية|بداية\s+الإعلان)[^|•]{0,120}?\b(?:قائم|متاح|مفتوح)\b/u);
+    if (match) titles.add(clean(match[1]));
   }
 
   return {
     parsed: true,
-    jobs: titles.slice(0, 20).map((title, index) => ({
+    explicitNoJobs: titles.size === 0 && /(?:لا\s+توجد\s+وظائف|لا\s+توجد\s+إعلانات)/.test(stripHtml(currentSection)),
+    jobs: [...titles].slice(0, 20).map((title) => ({
       external_id: `moh-${stableTextId(title)}`,
       title,
       company: source.company,
@@ -2126,7 +2146,7 @@ function extractMohCurrentJobs(html, source) {
       salary: null,
       published_at: null,
       expires_at: null,
-      summary: "إعلان توظيف قائم وفق صفحة «اعمل معنا» الرسمية لوزارة الصحة. راجع المصدر الأصلي للتخصصات والشروط وطريقة التقديم.",
+      summary: "إعلان توظيف مدرج بحالة قائم في صفحة وزارة الصحة الرسمية. راجع المصدر للتحقق من التخصصات وشروط التقديم وتفاصيل الفرص المتاحة.",
       source_url: source.url,
       apply_url: source.url,
       remote: 0,
@@ -3307,9 +3327,12 @@ async function syncMilitaryNewsSource(env, source) {
   // أو أن الاستخراج تعطل. لا نغيّر حالات الوظائف الموجودة في هذه الحالة.
   if (articleUrls.size === 0) {
     if (source.allowEmptyListing) {
-      await reviewMissingMilitaryJobs(env, source.key, []);
-      await upsertSource(env, source, { success: true, jobsSeen: 0, newJobs: 0, error: null, status: "ok" }, "official_news");
-      return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 0 };
+      // A rendered news listing may have no discoverable anchors even while
+      // official announcements exist. Do not report healthy ingestion or
+      // change existing military jobs based on an empty parser result.
+      const message = "Military news listing fetched, but no announcement links were parsed; check markup and official portal.";
+      await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "needs_review" }, "official_news");
+      return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
     }
 
     const message = "Official military listing loaded but no announcement URLs were discovered; existing jobs were left unchanged.";
@@ -3943,6 +3966,12 @@ function isIncompleteArabicJobTitle(value) {
 function jobTitleOverrideFromUrl(value) {
   const url = clean(value);
 
+  // Deterministic corrections for verified English titles that were mistranslated.
+  if (/\/job\/Flight-Attendant\/\d+/i.test(url)) return "مضيف أو مضيفة طيران";
+  if (/\/job\/Staff-Scientist-Viral-Vector-Facility\/\d+/i.test(url)) return "عالم أبحاث في مرفق النواقل الفيروسية";
+  if (/\/job\/Events-Coordinator\/\d+/i.test(url)) return "منسق فعاليات";
+  if (/\/job\/SAP-Solutions-Architect-Manager\/\d+/i.test(url)) return "مدير هندسة حلول SAP";
+
   if (/ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_?/i.test(url)) {
     return "أخصائي مشارك في إدارة المخاطر وسلامة المرضى";
   }
@@ -3977,7 +4006,23 @@ function isPublicJobReady(row) {
 
 function publicArabicJob(row) {
   const company = sourceArabicCompany(row.source_key, row.company);
-  const normalizedCity = normalizeCity(row.city);
+  // Listing feeds sometimes provide only the country although the official job URL names a city.
+  // Read only the location prefix before /job/; never infer a city from the job title.
+  const urlLocationPrefix = (() => {
+    try {
+      const parsed = new URL(row.source_url || row.apply_url);
+      const pathParts = parsed.pathname.split(/\/job\//i);
+      const prefix = pathParts[0];
+      // SuccessFactors often embeds the city at the beginning of the job slug.
+      const slug = pathParts[1] ? decodeURIComponent(pathParts[1].split("/")[0]) : "";
+      const slugCity = slug.match(/^(Riyadh|Jeddah|Jubail|Yanbu|Dammam|Dhahran|Khobar|Tabuk|Abha|Jazan|Najran|Rabigh|Makkah|Mecca|Madinah|Medina)(?:-|$)/i)?.[1] || "";
+      return prefix + " " + slugCity;
+    } catch { return ""; }
+  })();
+  const cityFromUrl = listingCityFromText(urlLocationPrefix);
+  const storedCity = normalizeCity(row.city);
+  const normalizedCity = (!storedCity || storedCity === "السعودية") && cityFromUrl && cityFromUrl !== "السعودية"
+    ? cityFromUrl : storedCity;
   const city = /^(?:غير محددة|غير محدد|غير معروف(?:ة)?)$/i.test(clean(normalizedCity))
     ? null
     : arabicPublicText(normalizedCity, null, 120);
@@ -4033,10 +4078,17 @@ async function listJobs(request, env) {
   where.push("NOT (source_url LIKE '%/Staff-Scientist-Viral-Vector-Facility/%' AND (title LIKE '%مستشفى العلماء%' OR title LIKE '%فيرول%'))");
   where.push("NOT (source_url LIKE '%/Events-Coordinator/%' AND title = 'مراقبة الأحداث')");
   where.push(`NOT (
-    source_key = 'sang-military'
+    source_key IN ('sang-military', 'spa-military')
     AND (
       apply_url IS NULL
-      OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+      OR (
+        apply_url NOT LIKE 'https://jobs.sang.gov.sa/%'
+        AND apply_url NOT LIKE 'https://jobs.sa/%'
+        AND apply_url NOT LIKE 'https://tajnid.mod.gov.sa/%'
+        AND apply_url NOT LIKE 'https://afca.mod.gov.sa/%'
+        AND apply_url NOT LIKE 'https://kkmar.gov.sa/%'
+        AND apply_url NOT LIKE 'https://www.kkmar.gov.sa/%'
+      )
     )
   )`);
   if (includeExpiredDays > 0) {
@@ -5831,7 +5883,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { extractMohCurrentJobs, publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {
