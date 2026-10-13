@@ -4206,7 +4206,16 @@ async function listJobs(request, env) {
   const url = new URL(request.url);
   const q = clean(url.searchParams.get("q")).slice(0, 120);
   const city = clean(url.searchParams.get("city")).slice(0, 80);
-  const sector = clean(url.searchParams.get("sector")).slice(0, 40);
+  const requestedSector = clean(url.searchParams.get("sector")).slice(0, 40);
+  const sector = ({
+    military: "عسكري",
+    government: "حكومي",
+    governmental: "حكومي",
+    public: "حكومي",
+    private: "خاص",
+    "عسكرية": "عسكري",
+    "حكومية": "حكومي"
+  })[requestedSector.toLowerCase()] || requestedSector;
   const source = clean(url.searchParams.get("source")).slice(0, 80);
   const remote = parseBoolean(url.searchParams.get("remote"));
   const freshGraduate = parseBoolean(url.searchParams.get("fresh_graduate"));
