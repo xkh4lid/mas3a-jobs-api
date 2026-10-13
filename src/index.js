@@ -1215,6 +1215,8 @@ function dedupeRepeatedFieldText(value) {
 function sanitizeQualificationField(value) {
   let text = dedupeRepeatedFieldText(value);
   if (!text || containsCookieNoise(text)) return null;
+  // Discard obvious scraped fragments instead of presenting them as qualifications.
+  if (/^[:×\s-]+/.test(text) && text.length < 70) return null;
 
   text = clean(text)
     .replace(/(?:\s+(?:المؤهل|المؤهلات|التعليم|Education|Qualifications?)\s*:?\s*){2,}/gi, " ")
@@ -1237,6 +1239,8 @@ function sanitizeQualificationField(value) {
 function sanitizeExperienceField(value) {
   let text = dedupeRepeatedFieldText(value);
   if (!text || containsCookieNoise(text)) return null;
+  // A navigation breadcrumb or level marker is not professional experience.
+  if (/^(?:مستوى\s*[×x]|[×x]\s*|\/\s*)/i.test(text)) return null;
 
   const contaminationMarkers = [
     "يرجى ملاحظة",
@@ -3943,6 +3947,12 @@ function isIncompleteArabicJobTitle(value) {
 function jobTitleOverrideFromUrl(value) {
   const url = clean(value);
 
+  // Deterministic corrections for verified English titles that were mistranslated.
+  if (/\/job\/Flight-Attendant\/\d+/i.test(url)) return "مضيف أو مضيفة طيران";
+  if (/\/job\/Staff-Scientist-Viral-Vector-Facility\/\d+/i.test(url)) return "عالم أبحاث في مرفق النواقل الفيروسية";
+  if (/\/job\/Events-Coordinator\/\d+/i.test(url)) return "منسق فعاليات";
+  if (/\/job\/SAP-Solutions-Architect-Manager\/\d+/i.test(url)) return "مدير هندسة حلول SAP";
+
   if (/ASSOCIATE-ERM-&-PATIENT-SAFETY-PROFESSIONAL_?/i.test(url)) {
     return "أخصائي مشارك في إدارة المخاطر وسلامة المرضى";
   }
@@ -3977,7 +3987,18 @@ function isPublicJobReady(row) {
 
 function publicArabicJob(row) {
   const company = sourceArabicCompany(row.source_key, row.company);
-  const normalizedCity = normalizeCity(row.city);
+  // Listing feeds sometimes provide only the country although the official job URL names a city.
+  // Read only the location prefix before /job/; never infer a city from the job title.
+  const urlLocationPrefix = (() => {
+    try {
+      const parsed = new URL(row.source_url || row.apply_url);
+      return parsed.pathname.split(/\/job\//i)[0];
+    } catch { return ""; }
+  })();
+  const cityFromUrl = listingCityFromText(urlLocationPrefix);
+  const storedCity = normalizeCity(row.city);
+  const normalizedCity = (!storedCity || storedCity === "السعودية") && cityFromUrl && cityFromUrl !== "السعودية"
+    ? cityFromUrl : storedCity;
   const city = /^(?:غير محددة|غير محدد|غير معروف(?:ة)?)$/i.test(clean(normalizedCity))
     ? null
     : arabicPublicText(normalizedCity, null, 120);
