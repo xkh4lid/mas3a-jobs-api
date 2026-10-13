@@ -200,7 +200,7 @@ const MILITARY_NEWS_SOURCES = [
     ],
     keywords: [
       "فتح باب", "القبول والتسجيل", "القبول الموحد", "التجنيد الموحد",
-      "استقبال طلبات", "بدء التقديم", "الالتحاق"
+      "استقبال طلبات", "بدء التقديم", "الالتحاق", "معسكرات", "منتهية بالتوظيف", "التوظيف العسكري"
     ],
     allowEmptyListing: true,
     rapid: true,
@@ -1642,7 +1642,7 @@ function extractMilitaryAnnouncement(html, source, url) {
     return null;
   }
 
-  const hasRecruitmentSignal = /(?:فتح\s+باب|القبول\s+والتسجيل|القبول\s+الموحد|بدء\s+(?:استقبال|التقديم|التسجيل)|استقبال\s+طلبات|التقديم\s+(?:متاح|على)|التسجيل\s+(?:متاح|للخدمة)|التجنيد\s+الموحد|الالتحاق\s+بالخدمة\s+العسكرية|وظائف\s+عسكرية)/i.test(focused);
+  const hasRecruitmentSignal = /(?:فتح\s+باب|القبول\s+والتسجيل|القبول\s+الموحد|بدء\s+(?:استقبال|التقديم|التسجيل)|استقبال\s+طلبات|التقديم\s+(?:متاح|على)|التسجيل\s+(?:متاح|للخدمة)|التجنيد\s+الموحد|الالتحاق\s+بالخدمة\s+العسكرية|وظائف\s+عسكرية|(?:معسكرات|برامج|دورات)\s+[^.،\n]{0,90}(?:منتهية\s+بالتوظيف|التوظيف\s+العسكري))/i.test(focused);
   if (!hasRecruitmentSignal || !source.keywords.some((keyword) => focused.includes(keyword))) return null;
 
   const applyUrl = findApplyUrl(html, source, url);
