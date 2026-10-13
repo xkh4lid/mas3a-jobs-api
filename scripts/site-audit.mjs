@@ -270,6 +270,16 @@ if (home.ok && home.contentType.includes("text/html")) {
     console.log("JavaScript asset:", JSON.stringify({
       url, status: asset.status, contentType: asset.contentType, size: asset.text.length
     }));
+    if (asset.ok && /javascript/i.test(asset.contentType)) {
+      const rulesAt = asset.text.indexOf("SOURCE_RULES");
+      console.log("Masaa frontend source rules:", JSON.stringify({
+        ruleIndex: rulesAt,
+        ruleSnippet: rulesAt >= 0 ? asset.text.slice(Math.max(0, rulesAt - 30), rulesAt + 2300) : "not found",
+        uqu: asset.text.includes("uqu.edu.sa"),
+        royalGuard: asset.text.includes("sabq.org"),
+        ministryHealth: asset.text.includes("moh.gov.sa")
+      }));
+    }
     if (!asset.ok || asset.contentType.includes("text/html") || asset.text.trimStart().toLowerCase().startsWith("<!doctype html")) {
       issue("critical", "broken_frontend_script", url, `Expected JavaScript but got status ${asset.status} and type ${asset.contentType}`);
     }
