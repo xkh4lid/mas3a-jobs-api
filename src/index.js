@@ -3311,9 +3311,12 @@ async function syncMilitaryNewsSource(env, source) {
   // أو أن الاستخراج تعطل. لا نغيّر حالات الوظائف الموجودة في هذه الحالة.
   if (articleUrls.size === 0) {
     if (source.allowEmptyListing) {
-      await reviewMissingMilitaryJobs(env, source.key, []);
-      await upsertSource(env, source, { success: true, jobsSeen: 0, newJobs: 0, error: null, status: "ok" }, "official_news");
-      return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 0 };
+      // A rendered news listing may have no discoverable anchors even while
+      // official announcements exist. Do not report healthy ingestion or
+      // change existing military jobs based on an empty parser result.
+      const message = "Military news listing fetched, but no announcement links were parsed; check markup and official portal.";
+      await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "needs_review" }, "official_news");
+      return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
     }
 
     const message = "Official military listing loaded but no announcement URLs were discovered; existing jobs were left unchanged.";
@@ -4059,10 +4062,17 @@ async function listJobs(request, env) {
   where.push("NOT (source_url LIKE '%/Staff-Scientist-Viral-Vector-Facility/%' AND (title LIKE '%مستشفى العلماء%' OR title LIKE '%فيرول%'))");
   where.push("NOT (source_url LIKE '%/Events-Coordinator/%' AND title = 'مراقبة الأحداث')");
   where.push(`NOT (
-    source_key = 'sang-military'
+    source_key IN ('sang-military', 'spa-military')
     AND (
       apply_url IS NULL
-      OR (apply_url NOT LIKE 'https://jobs.sang.gov.sa/%' AND apply_url NOT LIKE 'https://jobs.sa/%')
+      OR (
+        apply_url NOT LIKE 'https://jobs.sang.gov.sa/%'
+        AND apply_url NOT LIKE 'https://jobs.sa/%'
+        AND apply_url NOT LIKE 'https://tajnid.mod.gov.sa/%'
+        AND apply_url NOT LIKE 'https://afca.mod.gov.sa/%'
+        AND apply_url NOT LIKE 'https://kkmar.gov.sa/%'
+        AND apply_url NOT LIKE 'https://www.kkmar.gov.sa/%'
+      )
     )
   )`);
   if (includeExpiredDays > 0) {
