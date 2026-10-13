@@ -2173,7 +2173,7 @@ async function syncOfficialListingSource(env, source) {
     const seen = [];
     for (const job of extracted.jobs) {
       seen.push(job.external_id);
-      const result = await saveJob(env, source, job);
+      const result = await saveJob(env, source, job, source.key === "moh-jobs" ? { skipLocalization: true } : {});
       if (result.added) added += 1;
       if (result.updated) updated += 1;
     }
@@ -2664,7 +2664,7 @@ async function saveJob(env, source, rawJob, options = {}) {
   const stableKey = rawJob.external_id || rawJob.apply_url;
   const fingerprint = await sha256(`${source.key}|${stableKey}`);
   const rawHash = await sha256(
-    `${LOCALIZATION_VERSION}|${JSON.stringify({
+    `${LOCALIZATION_VERSION}|${source.key === "moh-jobs" ? "moh-title-v2|" : ""}${JSON.stringify({
       title: rawJob.title,
       company: rawJob.company,
       city: rawJob.city,
@@ -3370,12 +3370,13 @@ async function syncMilitaryNewsSource(env, source) {
     await reviewMissingMilitaryJobs(env, source.key, seenExternalIds);
   }
 
+  const sourceErrors = detailErrors + errors.length;
   await upsertSource(env, source, {
-    success: detailErrors === 0,
+    success: sourceErrors === 0,
     jobsSeen: seenExternalIds.length,
     newJobs: added,
-    error: detailErrors > 0 ? `${detailErrors} military announcement page(s) failed` : null,
-    status: detailErrors > 0 ? "partial" : "ok"
+    error: sourceErrors > 0 ? `${detailErrors} announcement page(s), ${errors.length} listing page(s) failed` : null,
+    status: sourceErrors > 0 ? "partial" : "ok"
   }, "official_news");
 
   return {
@@ -3383,7 +3384,7 @@ async function syncMilitaryNewsSource(env, source) {
     jobsSeen: seenExternalIds.length,
     added,
     updated,
-    errors: detailErrors
+    errors: sourceErrors
   };
 }
 
@@ -4211,11 +4212,10 @@ async function listSources(env) {
   await ensureCatalogSources(env);
   const result = await env.DB.prepare(
     `
-      SELECT name, source_type, sector, jobs_seen
+      SELECT name, source_type, sector, jobs_seen, status, last_checked_at
       FROM sources
       WHERE enabled = 1
         AND supported = 1
-        AND status = 'ok'
       ORDER BY sector ASC, name ASC
     `
   ).all();
@@ -4234,8 +4234,16 @@ async function listSources(env) {
       sector: source.sector,
       jobs_seen: Number(source.jobs_seen || 0),
       supported: 1,
-      status: "ok",
-      status_label: "يعمل بشكل طبيعي",
+      status: source.status || "pending",
+      status_label: ({
+        ok: "تم فحص المصدر",
+        partial: "تم الفحص جزئيًا",
+        needs_review: "المصدر يحتاج مراجعة",
+        error: "تعذر فحص المصدر",
+        pending: "بانتظار أول فحص",
+        monitor_only: "متابعة البوابة الرسمية"
+      })[source.status] || "قيد المتابعة",
+      last_checked_at: source.last_checked_at || null,
       source_type_label: typeLabels[source.source_type] || "مصدر وظائف"
     }))
   };
