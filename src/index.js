@@ -6435,18 +6435,19 @@ export default {
       const totalJobs = await verifiedJobCount(env);
       let syncResult = null;
 
-      if (totalJobs < CATCHUP_TARGET_JOBS) {
-        const minute = new Date(controller.scheduledTime).getUTCMinutes();
+      const minute = new Date(controller.scheduledTime).getUTCMinutes();
+      // Sector discovery must never be starved by the general job-count catch-up.
+      // The hourly support batch already checks government and military sources.
+      if (controller.cron === "17 * * * *") {
+        syncResult = await runSupportBatch(env);
+      } else if (minute % 15 === 0) {
+        syncResult = await runOfficialSectorBatch(env, ["moh-jobs", "uqu-scholarships-fund", "royal-guard-oct-2026", "sang-military", "spa-military"]);
+      } else if (totalJobs < CATCHUP_TARGET_JOBS) {
         syncResult = await runCatchupListingSourceBatch(
           env,
           catchupSourceKeyForMinute(minute),
           CATCHUP_TARGET_JOBS
         );
-      } else if (controller.cron === "17 * * * *") {
-        syncResult = await runSupportBatch(env);
-      } else if (new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) {
-        // Check live official government recruitment every 15 minutes, not just hourly.
-        syncResult = await runOfficialSectorBatch(env, ["moh-jobs", "uqu-scholarships-fund", "royal-guard-oct-2026"]);
       } else {
         const minute = new Date(controller.scheduledTime).getUTCMinutes();
         syncResult = await runSourceBatch(env, scheduledSourceKeyForMinute(minute));
