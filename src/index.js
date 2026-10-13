@@ -2099,29 +2099,40 @@ function stableTextId(prefixOrValue, maybeValue) {
 }
 
 function extractMohCurrentJobs(html, source) {
-  const text = stripHtml(html);
-  const currentIndex = text.indexOf("الوظائف الحالية");
-  if (currentIndex < 0) return { parsed: false, jobs: [] };
-  const previousIndex = text.indexOf("الوظائف السابقة", currentIndex + 1);
-  const section = text.slice(currentIndex, previousIndex > currentIndex ? previousIndex : Math.min(text.length, currentIndex + 5000));
-  const active = /(?:قائم|متاح|مفتوح)/.test(section);
-  if (!active) return { parsed: true, explicitNoJobs: true, jobs: [] };
+  const raw = String(html ?? "");
+  const currentHeading = raw.search(/الوظائف\s+الحالية/i);
+  if (currentHeading < 0) return { parsed: false, jobs: [] };
+  const afterHeading = raw.slice(currentHeading);
+  const previousHeading = afterHeading.search(/الوظائف\s+السابقة/i);
+  const currentSection = previousHeading >= 0 ? afterHeading.slice(0, previousHeading) : afterHeading.slice(0, 9000);
 
-  const titles = [];
-  const rx = /(إعلان\s+[^|•]{3,100}?)(?=\s+(?:من\s+بداية|إلى\s+نهاية|قائم|متاح|مفتوح|بداية\s+الإعلان|نهاية\s+الإعلان))/g;
-  let match;
-  while ((match = rx.exec(section))) {
-    const title = clean(match[1]).replace(/\s{2,}/g, " ");
-    if (title && !titles.includes(title)) titles.push(title);
+  // Read individual table rows, rather than matching arbitrary text across
+  // multiple announcements. Never count rows in "الوظائف السابقة".
+  const titles = new Set();
+  const rows = [...currentSection.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
+  for (const row of rows) {
+    const cells = [...row[1].matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)]
+      .map((match) => clean(stripHtml(match[1]).replace(/[\u200b-\u200f\ufeff]/g, "")));
+    if (cells.length < 2) continue;
+    const title = cells[0];
+    const state = cells.slice(1).join(" ");
+    if (!/^إعلان\s+.{3,180}$/u.test(title)) continue;
+    if (!/(?:قائم|متاح|مفتوح)/.test(state) || /(?:منتهي|انتهى|مغلق)/.test(state)) continue;
+    titles.add(title);
   }
-  if (!titles.length) {
-    const fallback = section.match(/(إعلان\s+[\u0600-\u06FF\s]+?)(?=\s+(?:من|إلى|قائم|متاح|مفتوح))/);
-    if (fallback?.[1]) titles.push(clean(fallback[1]));
+
+  // Defensive fallback for a non-tabular source: require the state adjacent
+  // to the title, and do not search beyond the current-jobs section.
+  if (rows.length === 0) {
+    const visible = stripHtml(currentSection).replace(/[\u200b-\u200f\ufeff]/g, "");
+    const match = visible.match(/(إعلان\s+[^|•]{3,140}?)\s+(?:من\s+بداية|بداية\s+الإعلان)[^|•]{0,120}?\b(?:قائم|متاح|مفتوح)\b/u);
+    if (match) titles.add(clean(match[1]));
   }
 
   return {
     parsed: true,
-    jobs: titles.slice(0, 20).map((title, index) => ({
+    explicitNoJobs: titles.size === 0 && /(?:لا\s+توجد\s+وظائف|لا\s+توجد\s+إعلانات)/.test(stripHtml(currentSection)),
+    jobs: [...titles].slice(0, 20).map((title) => ({
       external_id: `moh-${stableTextId(title)}`,
       title,
       company: source.company,
@@ -2135,7 +2146,7 @@ function extractMohCurrentJobs(html, source) {
       salary: null,
       published_at: null,
       expires_at: null,
-      summary: "إعلان توظيف قائم وفق صفحة «اعمل معنا» الرسمية لوزارة الصحة. راجع المصدر الأصلي للتخصصات والشروط وطريقة التقديم.",
+      summary: "إعلان توظيف مدرج بحالة قائم في صفحة وزارة الصحة الرسمية. راجع المصدر للتحقق من التخصصات وشروط التقديم وتفاصيل الفرص المتاحة.",
       source_url: source.url,
       apply_url: source.url,
       remote: 0,
@@ -5872,7 +5883,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { extractMohCurrentJobs, publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
 
 export default {
   async fetch(request, env) {
