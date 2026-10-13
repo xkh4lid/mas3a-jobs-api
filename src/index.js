@@ -1029,8 +1029,13 @@ function discoverArticleUrls(html, source, baseUrl) {
     const url = absoluteUrl(match[1], baseUrl);
     const anchorText = stripHtml(match[2] || "");
 
+    // News cards often put their headline in a sibling heading, not the link.
+    // Validate the official article URL first, then inspect the surrounding card
+    // before applying keyword filters. A generic "اقرأ المزيد" is not a title.
+    const cardText = stripHtml(normalized.slice(Math.max(0, match.index - 1100), Math.min(normalized.length, hrefRegex.lastIndex + 250)));
+    const discoveryText = clean(anchorText + " " + cardText);
     if (Array.isArray(source.listingKeywords) && source.listingKeywords.length > 0) {
-      const hasListingSignal = source.listingKeywords.some((keyword) => anchorText.includes(keyword));
+      const hasListingSignal = source.listingKeywords.some((keyword) => discoveryText.includes(keyword));
       if (!hasListingSignal) continue;
     }
 
