@@ -6056,7 +6056,7 @@ export default {
         syncResult = await runSupportBatch(env);
       } else if (new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) {
         // Check live official government recruitment every 15 minutes, not just hourly.
-        syncResult = await runOfficialSectorBatch(env, ["moh-jobs"]);
+        syncResult = await runOfficialSectorBatch(env, ["moh-jobs", "royal-guard-oct-2026"]);
       } else {
         const minute = new Date(controller.scheduledTime).getUTCMinutes();
         syncResult = await runSourceBatch(env, scheduledSourceKeyForMinute(minute));
