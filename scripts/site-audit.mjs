@@ -259,6 +259,20 @@ const [home, robots, sitemap] = await Promise.all([
   fetchText(BASE + "/sitemap.xml")
 ]);
 
+// Diagnose client-side job card failures: detect missing JS assets served as SPA HTML.
+if (home.ok && /text\\/html/i.test(home.contentType)) {
+  const scripts = [...home.text.matchAll(/<script\\b[^>]*\\bsrc=["']([^"']+)["'][^>]*>/gi)]
+    .map(m => new URL(m[1], BASE + "/").href)
+    .filter(url => new URL(url).origin === new URL(BASE).origin);
+  console.log("Homepage local JavaScript assets:", JSON.stringify(scripts));
+  for (const url of scripts.slice(0, 12)) {
+    const asset = await fetchText(url);
+    console.log("JavaScript asset:", JSON.stringify({url, status: asset.status, contentType: asset.contentType, size: asset.text.length}));
+    if (!asset.ok || /text\\/html/i.test(asset.contentType) || /^\\s*<!doctype html/i.test(asset.text)) {
+      issue("critical", "broken_frontend_script", url, `Expected JavaScript but got status ${asset.status} and type ${asset.contentType}`);
+    }
+  }
+}
 if (!home.ok) issue("critical", "homepage_down", BASE + "/", `Homepage returned ${home.status || home.error}.`);
 if (!robots.ok) {
   issue("critical", "robots_unavailable", BASE + "/robots.txt", `robots.txt returned ${robots.status || robots.error}.`);
