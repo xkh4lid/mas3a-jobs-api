@@ -1,0 +1,29 @@
+name: Prepare Masaa Frontend Card Fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/prepare-frontend-card-fix.mjs
+      - .github/workflows/prepare-frontend-card-fix.yml
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download and patch live Masaa frontend
+        run: node scripts/prepare-frontend-card-fix.mjs
+      - name: Upload patch and deployment instructions
+        uses: actions/upload-artifact@v4
+        with:
+          name: masaa-frontend-card-fix
+          path: frontend-card-fix/
+          retention-days: 30
