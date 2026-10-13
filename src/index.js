@@ -360,6 +360,16 @@ const SOURCE_CATALOG = [
     status: "monitor_only"
   },
   {
+    key: "uqu-scholarships-fund",
+    name: "جامعة أم القرى - وظائف الصندوق الخيري",
+    url: "https://uqu.edu.sa/studaff/152230",
+    source_type: "official_listing",
+    sector: "حكومي",
+    enabled: 1,
+    supported: 1,
+    status: "pending"
+  },
+  {
     key: EWDIFH_SOURCE.key,
     name: EWDIFH_SOURCE.name,
     url: EWDIFH_SOURCE.url,
