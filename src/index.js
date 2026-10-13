@@ -2160,8 +2160,10 @@ async function syncOfficialListingSource(env, source) {
   try {
     const html = await fetchText(source.url);
     const extracted = source.parser === "moh-current" ? extractMohCurrentJobs(html, source) : { parsed: false, jobs: [] };
-    if (!extracted.parsed) {
-      const message = "Official listing loaded but its expected structure was not found; no jobs were changed.";
+    if (!extracted.parsed || (extracted.jobs.length === 0 && extracted.explicitNoJobs !== true)) {
+      const message = !extracted.parsed
+        ? "Official listing loaded but its expected structure was not found; no jobs were changed."
+        : "Official current-jobs section loaded but no valid open job rows were extracted; manual review required.";
       await upsertSource(env, source, { success: false, jobsSeen: 0, newJobs: 0, error: message, status: "needs_review" }, source.sourceType || "official_listing");
       return { source: source.key, jobsSeen: 0, added: 0, updated: 0, errors: 1, error: message };
     }
