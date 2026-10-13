@@ -253,7 +253,7 @@ test("wraps long Telegram job titles without overflowing the card", () => {
 test("versions Telegram job-card URLs to bypass stale Telegram and edge caches", () => {
   const url = new URL(telegramJobCardUrl({}, { id: "job-123" }));
   assert.equal(url.searchParams.get("job"), "job-123");
-  assert.equal(url.searchParams.get("v"), "3.34.2-direct-telegram-photo-upload");
+  assert.equal(url.searchParams.get("v"), "3.35.0-whatsapp-channel-publisher");
 });
 
 
