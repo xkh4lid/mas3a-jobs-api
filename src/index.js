@@ -466,7 +466,7 @@ function catchupSourceKeyForMinute(minute) {
   return CATCHUP_SOURCE_ORDER[slot % CATCHUP_SOURCE_ORDER.length];
 }
 
-const VERSION = "3.34.2-direct-telegram-photo-upload";
+const VERSION = "3.35.0-whatsapp-channel-publisher";
 const LOCALIZATION_VERSION = "ar-v8-title-complete";
 const nowIso = () => new Date().toISOString();
 
@@ -4756,6 +4756,54 @@ const TELEGRAM_WEBHOOK_PATH = "/telegram/webhook";
 const MASAA_SITE_URL = "https://mas3a.pages.dev/";
 const TELEGRAM_CHANNEL_BATCH_SIZE = 3;
 const TELEGRAM_DM_BATCH_SIZE = 3;
+const WHATSAPP_CHANNEL_BATCH_SIZE = 3;
+const WHATSAPP_BOOTSTRAP_COUNT = 6;
+const WHATSAPP_DEFAULT_CHANNEL_NAME = "مَسعى | وظائف السعودية 🇸🇦";
+const WHAPI_BASE_URL = "https://gate.whapi.cloud";
+
+function normalizeWhatsAppChannelName(value) {
+  return clean(value)
+    .replace(/[\u0640\u064B-\u065F\u0670]/g, "")
+    .toLowerCase();
+}
+
+function whatsappValidNewsletterId(value) {
+  const id = clean(value);
+  return /^\d+@newsletter$/i.test(id);
+}
+
+function whatsappNewsletterItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  for (const key of ["newsletters", "data", "result", "items"]) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  return [];
+}
+
+function whatsappSelectNewsletterId(payload, desiredName = WHATSAPP_DEFAULT_CHANNEL_NAME) {
+  const items = whatsappNewsletterItems(payload).filter((item) => whatsappValidNewsletterId(item?.id));
+  if (!items.length) return "";
+
+  const desired = normalizeWhatsAppChannelName(desiredName);
+  const managedRoles = new Set(["creator", "admin", "owner"]);
+  const isManaged = (item) => {
+    const role = clean(item?.role).toLowerCase();
+    return !role || managedRoles.has(role);
+  };
+
+  const exactManaged = items.find(
+    (item) => isManaged(item) && normalizeWhatsAppChannelName(item?.name) === desired
+  );
+  if (exactManaged) return clean(exactManaged.id);
+
+  const managed = items.filter((item) => {
+    const role = clean(item?.role).toLowerCase();
+    return managedRoles.has(role);
+  });
+  if (managed.length === 1) return clean(managed[0].id);
+
+  return "";
+}
 
 async function telegramDerivedWebhookSecret(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return "";
@@ -5193,6 +5241,49 @@ function telegramChannelJobText(job) {
   return lines.join("\n");
 }
 
+function whatsappChannelJobText(job) {
+  const title = clean(job?.title) || "فرصة وظيفية";
+  const company = clean(job?.company);
+  const city = clean(job?.city);
+  const sector = clean(job?.sector);
+  const qualification = telegramSafeJobDetail(job?.qualification, "qualification");
+  const experience = telegramSafeJobDetail(job?.experience, "experience");
+  const applyUrl = telegramJobApplyUrl(job);
+
+  const heading = sector === "عسكري"
+    ? "🪖 *فرصة عسكرية جديدة*"
+    : sector === "حكومي"
+      ? "🏛️ *وظيفة حكومية جديدة*"
+      : "🟢 *فرصة وظيفية جديدة*";
+
+  const lines = [heading, "", "💼 *" + title + "*"];
+  if (company) lines.push("🏢 " + company);
+  if (city && city !== "السعودية") lines.push("📍 " + city);
+  if (sector) lines.push("🏷️ " + sector);
+  if (clean(job?.salary)) lines.push("💰 " + clean(job.salary));
+  if (clean(job?.work_mode)) lines.push("🧭 " + clean(job.work_mode));
+  if (qualification) lines.push("🎓 " + qualification);
+  if (experience) lines.push("🧑‍💼 " + experience);
+  if (clean(job?.expires_at)) lines.push("⏰ آخر موعد: " + clean(job.expires_at));
+
+  if (applyUrl) {
+    lines.push("", "✅ *التقديم من المصدر الرسمي:*", applyUrl);
+  }
+
+  const masaaUrl = new URL(MASAA_SITE_URL);
+  masaaUrl.searchParams.set("utm_source", "whatsapp");
+  masaaUrl.searchParams.set("utm_medium", "channel");
+  masaaUrl.searchParams.set("utm_campaign", "jobs");
+  lines.push("", "🌐 *المزيد من الوظائف:*", masaaUrl.href);
+  lines.push("", "🔁 أرسلها لشخص يبحث عن وظيفة.");
+  lines.push("*مَسعى | وظائف السعودية 🇸🇦*");
+
+  const hashtags = telegramJobDiscoveryHashtags(job);
+  if (hashtags) lines.push("", hashtags);
+
+  return lines.join("\n").slice(0, 4000);
+}
+
 async function telegramDeliveryExists(env, jobId, target) {
   const row = await env.DB.prepare("SELECT 1 AS found FROM telegram_job_delivery WHERE job_id = ? AND target = ? LIMIT 1")
     .bind(String(jobId), String(target)).first();
@@ -5202,6 +5293,181 @@ async function telegramDeliveryExists(env, jobId, target) {
 async function telegramMarkDelivered(env, jobId, target) {
   await env.DB.prepare("INSERT OR IGNORE INTO telegram_job_delivery (job_id, target, delivered_at) VALUES (?, ?, ?)")
     .bind(String(jobId), String(target), nowIso()).run();
+}
+
+async function ensureWhatsAppStorage(env) {
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS whatsapp_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT NOT NULL)").run();
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS whatsapp_job_delivery (job_id TEXT NOT NULL, target TEXT NOT NULL, delivered_at TEXT NOT NULL, message_id TEXT, PRIMARY KEY (job_id, target))").run();
+}
+
+async function whatsappGetMeta(env, key) {
+  const row = await env.DB.prepare("SELECT value FROM whatsapp_meta WHERE key = ? LIMIT 1").bind(key).first();
+  return clean(row?.value || "");
+}
+
+async function whatsappSetMeta(env, key, value) {
+  await env.DB.prepare("INSERT INTO whatsapp_meta (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
+    .bind(key, String(value ?? ""), nowIso()).run();
+}
+
+async function whapiApi(env, path, { method = "GET", body = null } = {}) {
+  if (!clean(env.WHAPI_TOKEN || "")) {
+    return { ok: false, status: 0, error: "WHAPI_TOKEN is not configured" };
+  }
+
+  const headers = {
+    "Accept": "application/json",
+    "Authorization": "Bearer " + env.WHAPI_TOKEN
+  };
+  if (body != null) headers["Content-Type"] = "application/json";
+
+  try {
+    const response = await fetch(WHAPI_BASE_URL + path, {
+      method,
+      headers,
+      body: body == null ? undefined : JSON.stringify(body)
+    });
+
+    let result = null;
+    try { result = await response.json(); }
+    catch {
+      try { result = { text: await response.text() }; }
+      catch { result = null; }
+    }
+
+    if (!response.ok) {
+      const apiMessage = clean(
+        result?.message || result?.error || result?.detail || result?.text || ("HTTP " + response.status)
+      );
+      console.error("mas3a_whapi_error", path, response.status, apiMessage || "unknown");
+      return { ok: false, status: response.status, error: apiMessage || "Whapi API error", result };
+    }
+
+    return { ok: true, status: response.status, result };
+  } catch (error) {
+    const message = clean(error?.message || error || "Whapi API error");
+    console.error("mas3a_whapi_fetch_error", path, message);
+    return { ok: false, status: 0, error: message };
+  }
+}
+
+async function resolveWhatsAppChannelId(env) {
+  const configured = clean(env.WHATSAPP_CHANNEL_ID || "");
+  if (whatsappValidNewsletterId(configured)) return configured;
+
+  await ensureWhatsAppStorage(env);
+  const stored = await whatsappGetMeta(env, "channel_id");
+  if (whatsappValidNewsletterId(stored)) return stored;
+
+  if (!clean(env.WHAPI_TOKEN || "")) return "";
+
+  const newsletters = await whapiApi(env, "/newsletters?count=100");
+  if (!newsletters.ok) return "";
+
+  const desiredName = clean(env.WHATSAPP_CHANNEL_NAME || WHATSAPP_DEFAULT_CHANNEL_NAME);
+  const channelId = whatsappSelectNewsletterId(newsletters.result, desiredName);
+  if (!channelId) return "";
+
+  const matched = whatsappNewsletterItems(newsletters.result).find((item) => clean(item?.id) === channelId);
+  await whatsappSetMeta(env, "channel_id", channelId);
+  await whatsappSetMeta(env, "channel_name", clean(matched?.name || desiredName));
+  return channelId;
+}
+
+async function whatsappDeliveryExists(env, jobId, target) {
+  const row = await env.DB.prepare("SELECT 1 AS found FROM whatsapp_job_delivery WHERE job_id = ? AND target = ? LIMIT 1")
+    .bind(String(jobId), String(target)).first();
+  return Boolean(row?.found);
+}
+
+async function whatsappMarkDelivered(env, jobId, target, messageId = "") {
+  await env.DB.prepare("INSERT OR IGNORE INTO whatsapp_job_delivery (job_id, target, delivered_at, message_id) VALUES (?, ?, ?, ?)")
+    .bind(String(jobId), String(target), nowIso(), clean(messageId) || null).run();
+}
+
+async function whatsappSendChannelJob(env, channelId, job) {
+  const result = await whapiApi(env, "/messages/text", {
+    method: "POST",
+    body: {
+      to: channelId,
+      body: whatsappChannelJobText(job)
+    }
+  });
+
+  if (!result.ok) return result;
+
+  const messageId = clean(
+    result.result?.sent_message?.id ||
+    result.result?.message?.id ||
+    result.result?.id ||
+    ""
+  );
+
+  return { ok: true, status: result.status, message_id: messageId, result: result.result };
+}
+
+async function whatsappBootstrapChannel(env, channelId) {
+  const key = "channel_bootstrap:" + channelId + ":v1";
+  if (await whatsappGetMeta(env, key)) return { ok: true, already_bootstrapped: true };
+
+  const jobs = await telegramLatestVerifiedJobs(env, 100);
+  if (!jobs.length) {
+    await whatsappSetMeta(env, key, "done");
+    return { ok: true, published: 0 };
+  }
+
+  const target = "channel:" + channelId;
+  const initial = jobs.slice(0, WHATSAPP_BOOTSTRAP_COUNT).reverse();
+  let published = 0;
+
+  for (const job of initial) {
+    if (await whatsappDeliveryExists(env, job.id, target)) continue;
+    const sent = await whatsappSendChannelJob(env, channelId, job);
+    if (!sent.ok) return { ok: false, published, status: sent.status, error: sent.error };
+    await whatsappMarkDelivered(env, job.id, target, sent.message_id);
+    published += 1;
+  }
+
+  for (const job of jobs.slice(WHATSAPP_BOOTSTRAP_COUNT)) {
+    await whatsappMarkDelivered(env, job.id, target);
+  }
+
+  await whatsappSetMeta(env, key, "done");
+  return { ok: true, published };
+}
+
+async function publishWhatsAppUpdates(env) {
+  if (!clean(env.WHAPI_TOKEN || "")) {
+    return { ok: true, skipped: true, reason: "token_not_configured" };
+  }
+
+  await ensureWhatsAppStorage(env);
+  const channelId = await resolveWhatsAppChannelId(env);
+  if (!channelId) {
+    return { ok: true, skipped: true, reason: "channel_not_connected" };
+  }
+
+  const bootstrap = await whatsappBootstrapChannel(env, channelId);
+  if (!bootstrap.ok || !bootstrap.already_bootstrapped) return bootstrap;
+
+  const target = "channel:" + channelId;
+  const jobs = await telegramLatestVerifiedJobs(env, 40);
+  const pending = [];
+
+  for (const job of jobs) {
+    if (!(await whatsappDeliveryExists(env, job.id, target))) pending.push(job);
+    if (pending.length >= WHATSAPP_CHANNEL_BATCH_SIZE) break;
+  }
+
+  let published = 0;
+  for (const job of pending.reverse()) {
+    const sent = await whatsappSendChannelJob(env, channelId, job);
+    if (!sent.ok) return { ok: false, published, status: sent.status, error: sent.error };
+    await whatsappMarkDelivered(env, job.id, target, sent.message_id);
+    published += 1;
+  }
+
+  return { ok: true, published };
 }
 
 function xmlEscape(value) {
@@ -6005,6 +6271,39 @@ async function handleRequest(request, env) {
     }
   }
 
+  if (request.method === "GET" && path === "/whatsapp/status") {
+    try {
+      const configured = Boolean(clean(env.WHAPI_TOKEN || ""));
+      if (!configured) {
+        return json({
+          ok: true,
+          configured: false,
+          channel_connected: false,
+          published_count: 0
+        }, env, 200, { "Cache-Control": "no-store" });
+      }
+
+      await ensureWhatsAppStorage(env);
+      const channelId = await resolveWhatsAppChannelId(env);
+      let publishedCount = 0;
+      if (channelId) {
+        const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM whatsapp_job_delivery WHERE target = ?")
+          .bind("channel:" + channelId).first();
+        publishedCount = Number(row?.count || 0);
+      }
+
+      return json({
+        ok: true,
+        configured: true,
+        channel_connected: Boolean(channelId),
+        channel_name: clean(env.WHATSAPP_CHANNEL_NAME || WHATSAPP_DEFAULT_CHANNEL_NAME),
+        published_count: publishedCount
+      }, env, 200, { "Cache-Control": "no-store" });
+    } catch (error) {
+      return internalError(error, env);
+    }
+  }
+
   if (request.method === "GET" && path === "/") {
     return json({ ok: true, service: "Masaa Jobs API" }, env);
   }
@@ -6109,7 +6408,7 @@ async function handleRequest(request, env) {
   return json({ ok: false, error: "Not found" }, env, 404);
 }
 
-export { extractMohCurrentJobs, extractUquFundJobs, publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY };
+export { extractMohCurrentJobs, extractUquFundJobs, publicArabicJob, normalizeCity, sanitizeExperienceField, sanitizeQualificationField, discoverJobUrls, discoverArticleUrls, extractMilitaryAnnouncement, extractListingCandidates, pageExplicitlyHasNoJobs, externalIdFromUrl, normalizeDigits, parseDate, parseArabicGregorianDate, isAllowedOfficialUrl, stableTextId, successFactorsSearchUrls, scheduledSourceKeyForMinute, catchupSourceKeyForMinute, isIncompleteArabicJobTitle, jobTitleOverrideFromUrl, telegramJobCardSvg, telegramCompanyDomain, telegramCompanyLogoCandidateUrls, telegramJobCardUrl, telegramShareUrl, telegramChannelJobText, telegramSafeJobDetail, telegramPhotoFormData, TELEGRAM_CHANNEL_IDENTITY_PREVIEW_KEY, TELEGRAM_CHANNEL_GROWTH_WELCOME_KEY, normalizeWhatsAppChannelName, whatsappSelectNewsletterId, whatsappChannelJobText };
 
 export default {
   async fetch(request, env) {
@@ -6125,6 +6424,12 @@ export default {
         await publishTelegramUpdates(env);
       } catch (error) {
         console.error("mas3a_telegram_scheduled_pre_sync_error", clean(error?.message || error));
+      }
+
+      try {
+        await publishWhatsAppUpdates(env);
+      } catch (error) {
+        console.error("mas3a_whatsapp_scheduled_pre_sync_error", clean(error?.message || error));
       }
 
       const totalJobs = await verifiedJobCount(env);
@@ -6151,6 +6456,12 @@ export default {
         await publishTelegramUpdates(env);
       } catch (error) {
         console.error("mas3a_telegram_scheduled_post_sync_error", clean(error?.message || error));
+      }
+
+      try {
+        await publishWhatsAppUpdates(env);
+      } catch (error) {
+        console.error("mas3a_whatsapp_scheduled_post_sync_error", clean(error?.message || error));
       }
 
       return syncResult;
