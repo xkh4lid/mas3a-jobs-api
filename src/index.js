@@ -3805,6 +3805,33 @@ async function runSupportBatch(env) {
   };
 }
 
+// Keep government and military refreshes independent from the lengthy private-job batch.
+async function runOfficialSectorBatch(env, onlyKeys = []) {
+  const active = await activeSyncRun(env);
+  if (active) return { ok: true, skipped: true, reason: "sync_already_running" };
+  await ensureCatalogSources(env);
+  await expirePastDeadlineJobs(env);
+  const started = await beginSyncRun(env);
+  const results = [];
+  for (const source of OFFICIAL_LISTING_SOURCES) {
+    if (onlyKeys.length && !onlyKeys.includes(source.key)) continue;
+    results.push(await syncOfficialListingSource(env, source));
+  }
+  for (const source of MILITARY_NEWS_SOURCES) {
+    if (onlyKeys.length && !onlyKeys.includes(source.key)) continue;
+    results.push(await syncMilitaryNewsSource(env, source));
+  }
+  const summary = {
+    sourcesChecked: results.length,
+    jobsSeen: results.reduce((n, x) => n + (x.jobsSeen || 0), 0),
+    jobsAdded: results.reduce((n, x) => n + (x.added || 0), 0),
+    jobsUpdated: results.reduce((n, x) => n + (x.updated || 0), 0),
+    errors: results.reduce((n, x) => n + (x.errors || 0), 0)
+  };
+  await finishSyncRun(env, started.runId, summary);
+  return { ok: summary.errors === 0, mode: "official_sectors", ...summary, results };
+}
+
 async function runSync(env, options = {}) {
   const sourceKey = clean(options.sourceKey || "");
   if (sourceKey === "ewdifh") {
@@ -3818,6 +3845,13 @@ async function runSync(env, options = {}) {
     await quarantineDiscoveryDuplicates(env);
     return { ok: (result.errors || 0) === 0, mode: "discovery_source", result };
   }
+  // Allow authenticated, targeted refreshes of official public-sector sources.
+  // Previously /sync?source=moh-jobs always returned unknown_source.
+  if (sourceKey === "moh-jobs") return runOfficialSectorBatch(env, [sourceKey]);
+  if (MILITARY_NEWS_SOURCES.some((item) => item.key === sourceKey)) {
+    return runOfficialSectorBatch(env, [sourceKey]);
+  }
+  if (sourceKey === "official-sectors") return runOfficialSectorBatch(env);
   if (sourceKey) return runSourceBatch(env, sourceKey);
   return runSourceBatch(env, scheduledSourceKeyForMinute(new Date().getUTCMinutes()));
 }
@@ -5913,6 +5947,9 @@ export default {
         );
       } else if (controller.cron === "17 * * * *") {
         syncResult = await runSupportBatch(env);
+      } else if (new Date(controller.scheduledTime).getUTCMinutes() % 15 === 0) {
+        // Check live official government recruitment every 15 minutes, not just hourly.
+        syncResult = await runOfficialSectorBatch(env, ["moh-jobs"]);
       } else {
         const minute = new Date(controller.scheduledTime).getUTCMinutes();
         syncResult = await runSourceBatch(env, scheduledSourceKeyForMinute(minute));
