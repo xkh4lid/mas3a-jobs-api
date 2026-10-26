@@ -1,0 +1,70 @@
+/*
+MASAA Saudi Editorial UI layer — experimental CSS only.
+Load last after existing styles. Never upload this folder alone as a Pages deployment.
+Based on Taste Skill's art-direction principles; not a completed CLI/browser audit.
+*/
+:root,html[data-theme="light"]{
+ --masaa-display:"SF Arabic","Geeza Pro","Noto Kufi Arabic",Tahoma,system-ui,sans-serif;
+ --bg:#f6f3eb;--bg-2:#eeeae0;--card:#fffdf8;--card-2:#f8f6ef;--card-3:#eef3ea;
+ --ink:#172e27;--muted:#66766e;--muted-2:#829087;--line:#dcded2;--line-strong:#bfcbbd;
+ --green:#123d32;--green-2:#2d6952;--green-deep:#103d31;--mint:#d8e9d9;--amber:#b77f3f;
+ --shadow:0 28px 80px rgba(30,48,34,.10);--shadow-soft:0 12px 32px rgba(30,48,34,.07);
+}
+html[data-theme="dark"]{
+ --bg:#0a1916;--bg-2:#0e241d;--card:#10271f;--card-2:#142d24;--card-3:#193a2c;
+ --ink:#eff4ec;--muted:#aec2b6;--muted-2:#8aa698;--line:#2a4537;--line-strong:#3c614e;
+ --green:#92dbac;--green-2:#79c99b;--green-deep:#173e2e;--mint:#ccefd7;--amber:#e2b06c;
+ --shadow:0 24px 80px rgba(0,0,0,.24);--shadow-soft:0 10px 32px rgba(0,0,0,.16);
+}
+html{scroll-padding-top:100px}
+body{font-family:var(--masaa-display);background:var(--bg);color:var(--ink)}
+:where(a,button,input,select,summary,[tabindex]):focus-visible{outline:3px solid #c89458;outline-offset:3px}
+:where(button,input,select){font:inherit}
+.topbar{border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.main-nav a{border-radius:999px;font-weight:650}
+.main-nav a.active,.main-nav a:hover{color:var(--green);background:var(--card-3)}
+.header-cta,.filter-apply-btn,.search-action,.filter-primary{border-radius:13px;font-weight:750;transition:transform .2s ease,box-shadow .2s ease}
+.header-cta:hover,.filter-apply-btn:hover,.search-action:hover,.filter-primary:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(16,61,49,.17)}
+.hero-shell{padding-top:clamp(18px,3vw,38px)}
+.hero{isolation:isolate;border:1px solid rgba(255,255,255,.12);border-radius:clamp(24px,3.5vw,42px);background:radial-gradient(ellipse at 15% 16%,rgba(179,203,146,.17),transparent 46%),linear-gradient(135deg,#103d31 0%,#102e27 48%,#071e19 100%);box-shadow:0 32px 84px rgba(12,44,32,.16)}
+.hero-copy{position:relative;z-index:1}
+.hero-copy .eyebrow{width:fit-content;background:rgba(255,255,255,.09);border:1px solid rgba(226,232,201,.22);color:#e3ead9;border-radius:999px;padding:9px 15px}
+.hero-copy h1{font-family:var(--masaa-display);font-weight:850;line-height:1.2;letter-spacing:-.035em}
+.hero-copy h1 .hero-slogan{letter-spacing:-.045em;text-wrap:balance}
+.hero-copy h1 .hero-slogan em{color:#d6b47c;font-style:normal}
+.hero-copy p{max-width:61ch;line-height:1.95;color:#d3e1d7}
+.hero-filter-card{background:rgba(255,252,246,.97);border:1px solid rgba(239,243,228,.82);border-radius:24px;box-shadow:0 26px 54px rgba(0,17,12,.18)}
+.hero-filter-card :where(h3,label,.hero-meta){color:#183b2e}
+.hero-filter-field select{border-radius:12px;border-color:#d5dfd5;background:#fff;color:#17382d}
+.search-panel{border:1px solid var(--line);background:var(--card);border-radius:22px;box-shadow:var(--shadow-soft)}
+.searchbox{background:var(--card-2);border-radius:14px;border-color:var(--line)}
+.searchbox input{background:transparent}
+.chips{gap:9px}
+.chips button{border-radius:999px;border:1px solid var(--line);background:var(--card-2);color:var(--ink);font-weight:650;transition:background .2s,border-color .2s,transform .2s}
+.chips button:hover{border-color:var(--green-2);transform:translateY(-1px)}
+.chips button.active,.chips button[aria-pressed="true"]{background:var(--card-3);border-color:var(--green-2)}
+.section-label{color:var(--green-2);font-weight:800;letter-spacing:.02em}
+.content-shell :where(h2,h3),.source-hub-head h2{font-family:var(--masaa-display);letter-spacing:-.025em;text-wrap:balance}
+.smart-card,.source-hub-grid a,.growth-link-grid a{border:1px solid var(--line);background:var(--card);box-shadow:var(--shadow-soft);border-radius:20px;transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
+.smart-card:hover,.source-hub-grid a:hover,.growth-link-grid a:hover{transform:translateY(-4px);border-color:var(--line-strong);box-shadow:var(--shadow)}
+.smart-card strong{font-weight:800}
+.smart-card .category-icon{background:var(--card-3);border:1px solid var(--line);color:var(--green)}
+.dashboard-top-grid .hero-map-panel,.source-hub,.insights,.match,.tracker,.sources,.rights,.growth-faq{border-color:var(--line)}
+.job-card{border-radius:20px;border:1px solid var(--line);background:var(--card);box-shadow:0 8px 28px rgba(30,48,34,.055);padding:clamp(17px,2vw,23px);gap:15px;transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}
+.job-card:hover{transform:translateY(-4px);border-color:var(--green-2);box-shadow:0 20px 44px rgba(18,61,49,.12)}
+.job-card.expired-job{opacity:.75}
+.job-card :where(h3,strong){overflow-wrap:anywhere}
+.job-card .availability{border-radius:999px}
+.jobs-grid{gap:clamp(12px,1.6vw,20px)}
+.jobs-load-more{border-radius:14px;font-weight:750}
+.sort-tools select,.match-sort{border-radius:12px}
+.tracker-list :where(article,.tracker-item),.trust-levels article,.rights-grid article,.growth-faq-grid details{border-radius:20px;border-color:var(--line);background:var(--card)}
+.growth-faq-grid summary{cursor:pointer}
+.mobile-dock{background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(16px)}
+.mobile-dock a.active{color:var(--green-2)}
+html[data-theme="dark"] .hero-filter-card{background:#122c24;border-color:#3e594b}
+html[data-theme="dark"] .hero-filter-card :where(h3,label,.hero-meta){color:#e9f5e9}
+html[data-theme="dark"] .hero-filter-field select{background:#17382d;color:#eef6e9;border-color:#3e594b}
+@media(max-width:960px){.hero{border-radius:26px}.hero-copy p{max-width:100%}.jobs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:680px){html{scroll-padding-top:75px}.hero-shell{padding-top:8px}.hero{border-radius:24px}.hero-copy h1{line-height:1.25}.hero-copy p{line-height:1.85}.hero-filter-card{border-radius:18px;box-shadow:0 12px 30px rgba(0,17,12,.16)}.search-panel{border-radius:17px}.chips{gap:7px}.chips button{min-height:40px}.jobs-grid{grid-template-columns:minmax(0,1fr);gap:12px}.job-card,.smart-card{border-radius:17px}.job-card{padding:17px}.mobile-dock{padding-bottom:env(safe-area-inset-bottom,0px)}.searchbox input,.hero-filter-field select{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.job-card,.smart-card,.source-hub-grid a,.growth-link-grid a,.header-cta,.search-action,.chips button{transition:none}.job-card:hover,.smart-card:hover,.source-hub-grid a:hover,.growth-link-grid a:hover,.header-cta:hover,.search-action:hover{transform:none}}
