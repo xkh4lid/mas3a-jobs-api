@@ -1,4 +1,4 @@
-import {AREAS,ORIGIN,esc,slug,jobPath,valid,place,html,response} from './_jobs_shared.js';
+import {AREAS,ORIGIN,esc,slug,jobPath,valid,place,html,response} from '../_jobs_shared.js';
 export async function onRequestGet({env,params,request}){
  const raw=Array.isArray(params.path)?params.path.join('/'):String(params.path||'');
  const path=decodeURIComponent(raw);
