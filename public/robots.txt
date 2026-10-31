@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Allow: /jobs/
+Sitemap: https://mas3a.pages.dev/sitemap.xml
